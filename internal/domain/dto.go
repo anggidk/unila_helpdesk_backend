@@ -38,6 +38,7 @@ type TicketDTO struct {
     History    []TicketHistoryDTO `json:"history"`
     Comments   []TicketCommentDTO `json:"comments"`
     SurveyRequired bool          `json:"surveyRequired"`
+    SurveyScore float64          `json:"surveyScore"`
 }
 
 type ServiceCategoryDTO struct {
@@ -81,6 +82,61 @@ type ServiceTrendDTO struct {
     Label      string  `json:"label"`
     Percentage float64 `json:"percentage"`
     Note       string  `json:"note"`
+}
+
+type DashboardSummaryDTO struct {
+    TotalTickets       int     `json:"totalTickets"`
+    OpenTickets        int     `json:"openTickets"`
+    ResolvedThisPeriod int     `json:"resolvedThisPeriod"`
+    AvgRating          float64 `json:"avgRating"`
+}
+
+type ServiceSatisfactionDTO struct {
+    CategoryID string  `json:"categoryId"`
+    Label      string  `json:"label"`
+    AvgScore   float64 `json:"avgScore"`
+    Responses  int     `json:"responses"`
+    Percentage float64 `json:"percentage"`
+}
+
+type UsageCohortRowDTO struct {
+    Label   string `json:"label"`
+    Tickets int    `json:"tickets"`
+    Surveys int    `json:"surveys"`
+}
+
+type SurveySatisfactionRowDTO struct {
+    QuestionID string  `json:"questionId"`
+    Question   string  `json:"question"`
+    Type       string  `json:"type"`
+    AvgScore   float64 `json:"avgScore"`
+    Responses  int     `json:"responses"`
+}
+
+type SurveySatisfactionDTO struct {
+    TemplateID string                     `json:"templateId"`
+    Template   string                     `json:"template"`
+    CategoryID string                     `json:"categoryId"`
+    Category   string                     `json:"category"`
+    Period     string                     `json:"period"`
+    Start      time.Time                  `json:"start"`
+    End        time.Time                  `json:"end"`
+    Rows       []SurveySatisfactionRowDTO `json:"rows"`
+}
+
+type ServiceUtilizationDTO struct {
+    CategoryID       string `json:"categoryId"`
+    Category         string `json:"category"`
+    FirstTicketUsers int    `json:"firstTicketUsers"`
+    FirstSurveyUsers int    `json:"firstSurveyUsers"`
+}
+
+type EntityServiceDTO struct {
+    Entity     string `json:"entity"`
+    CategoryID string `json:"categoryId"`
+    Category   string `json:"category"`
+    Tickets    int    `json:"tickets"`
+    Surveys    int    `json:"surveys"`
 }
 
 func ToUserDTO(user User) UserDTO {

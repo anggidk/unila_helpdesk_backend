@@ -64,7 +64,7 @@ type ServiceCategory struct {
 }
 
 type Ticket struct {
-    ID             string         `gorm:"primaryKey;size:32"`
+    ID             string         `gorm:"primaryKey;size:64"`
     Title          string         `gorm:"size:180"`
     Description    string         `gorm:"type:text"`
     CategoryID     string         `gorm:"size:60;index"`
@@ -86,7 +86,7 @@ type Ticket struct {
 
 type TicketHistory struct {
     ID          string    `gorm:"primaryKey;type:varchar(36)"`
-    TicketID    string    `gorm:"size:32;index"`
+    TicketID    string    `gorm:"size:64;index"`
     Title       string    `gorm:"size:160"`
     Description string    `gorm:"type:text"`
     Timestamp   time.Time `gorm:"index"`
@@ -95,7 +95,7 @@ type TicketHistory struct {
 
 type TicketComment struct {
     ID        string    `gorm:"primaryKey;type:varchar(36)"`
-    TicketID  string    `gorm:"size:32;index"`
+    TicketID  string    `gorm:"size:64;index"`
     Author    string    `gorm:"size:120"`
     Message   string    `gorm:"type:text"`
     IsStaff   bool
@@ -124,9 +124,10 @@ type SurveyQuestion struct {
 
 type SurveyResponse struct {
     ID        string         `gorm:"primaryKey;type:varchar(36)"`
-    TicketID  string         `gorm:"size:32;index"`
+    TicketID  string         `gorm:"size:64;index"`
     UserID    string         `gorm:"size:36;index"`
     Answers   datatypes.JSON `gorm:"type:jsonb"`
+    Score     float64        `gorm:"default:0"`
     CreatedAt time.Time
 }
 
