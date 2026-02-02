@@ -3,6 +3,7 @@ package main
 import (
     "log"
     "net/http"
+    "strings"
 
     "unila_helpdesk_backend/internal/config"
     "unila_helpdesk_backend/internal/db"
@@ -20,7 +21,11 @@ import (
 func main() {
     _ = godotenv.Load()
     cfg := config.Load()
+    validateConfig(cfg)
 
+    if err := db.EnsureDatabase(cfg); err != nil {
+        log.Fatalf("database ensure failed: %v", err)
+    }
     database, err := db.Connect(cfg)
     if err != nil {
         log.Fatalf("database connection failed: %v", err)
@@ -76,5 +81,18 @@ func main() {
     log.Printf("%s running on :%s", cfg.AppName, cfg.HTTPPort)
     if err := router.Run(":" + cfg.HTTPPort); err != nil {
         log.Fatalf("server failed: %v", err)
+    }
+}
+
+func validateConfig(cfg config.Config) {
+    if strings.TrimSpace(cfg.JWTSecret) == "" || cfg.JWTSecret == "change-me" {
+        log.Fatal("JWT_SECRET wajib di-set dan tidak boleh menggunakan default")
+    }
+    if strings.EqualFold(cfg.Environment, "production") {
+        for _, origin := range cfg.CORSOrigins {
+            if origin == "*" {
+                log.Fatal("CORS_ORIGINS tidak boleh menggunakan '*' di production")
+            }
+        }
     }
 }

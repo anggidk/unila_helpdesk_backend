@@ -58,3 +58,5 @@ flutter run --dart-define=API_BASE_URL=http://localhost:8080
 - `POST /notifications/fcm` (auth)
 - `GET /reports` (admin)
 - `GET /reports/cohort` (admin)
+
+Catatan: akun guest tidak diizinkan mengisi survey. Survey hanya bisa diisi pengguna terdaftar dan tiket berstatus selesai.
