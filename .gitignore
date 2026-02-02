@@ -1,0 +1,36 @@
+# Go build artifacts
+/bin/
+/build/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test output
+*.test
+*.out
+
+# Go workspace
+/go.work
+/go.work.sum
+
+# Local Go caches (used by CI/CLI runs here)
+/.gocache/
+/.gomodcache/
+
+# Dependency caches
+/vendor/
+
+# Editor/OS
+*.swp
+*.swo
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Env files
+.env
+
+# Logs
+*.log
