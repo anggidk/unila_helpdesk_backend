@@ -24,7 +24,8 @@ func (repo *SurveyRepository) ListTemplates() ([]domain.SurveyTemplate, error) {
 
 func (repo *SurveyRepository) FindByCategory(categoryID string) (*domain.SurveyTemplate, error) {
     var template domain.SurveyTemplate
-    if err := repo.db.Preload("Questions").First(&template, "category_id = ?", categoryID).Error; err != nil {
+    if err := repo.db.Preload("Questions").Order("updated_at desc, created_at desc").
+        First(&template, "category_id = ?", categoryID).Error; err != nil {
         return nil, err
     }
     return &template, nil
@@ -44,6 +45,49 @@ func (repo *SurveyRepository) CreateTemplate(template *domain.SurveyTemplate) er
 
 func (repo *SurveyRepository) UpdateTemplate(template *domain.SurveyTemplate) error {
     return repo.db.Session(&gorm.Session{FullSaveAssociations: true}).Updates(template).Error
+}
+
+func (repo *SurveyRepository) ReplaceTemplate(template *domain.SurveyTemplate) error {
+    return repo.db.Transaction(func(tx *gorm.DB) error {
+        updates := map[string]any{
+            "title":       template.Title,
+            "description": template.Description,
+            "category_id": template.CategoryID,
+            "updated_at":  template.UpdatedAt,
+        }
+        result := tx.Model(&domain.SurveyTemplate{}).Where("id = ?", template.ID).Updates(updates)
+        if result.Error != nil {
+            return result.Error
+        }
+        if result.RowsAffected == 0 {
+            return gorm.ErrRecordNotFound
+        }
+        if err := tx.Where("template_id = ?", template.ID).Delete(&domain.SurveyQuestion{}).Error; err != nil {
+            return err
+        }
+        if len(template.Questions) > 0 {
+            if err := tx.Create(&template.Questions).Error; err != nil {
+                return err
+            }
+        }
+        return nil
+    })
+}
+
+func (repo *SurveyRepository) DeleteTemplate(templateID string) error {
+    return repo.db.Transaction(func(tx *gorm.DB) error {
+        if err := tx.Where("template_id = ?", templateID).Delete(&domain.SurveyQuestion{}).Error; err != nil {
+            return err
+        }
+        result := tx.Delete(&domain.SurveyTemplate{}, "id = ?", templateID)
+        if result.Error != nil {
+            return result.Error
+        }
+        if result.RowsAffected == 0 {
+            return gorm.ErrRecordNotFound
+        }
+        return nil
+    })
 }
 
 func (repo *SurveyRepository) SaveResponse(response *domain.SurveyResponse) error {

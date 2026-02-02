@@ -23,6 +23,8 @@ func (handler *SurveyHandler) RegisterRoutes(public *gin.RouterGroup, auth *gin.
     public.GET("/surveys/categories/:categoryId", handler.templateByCategory)
     admin.POST("/surveys", handler.createTemplate)
     admin.POST("/surveys/templates", handler.createTemplate)
+    admin.PUT("/surveys/templates/:id", handler.updateTemplate)
+    admin.DELETE("/surveys/templates/:id", handler.deleteTemplate)
     auth.POST("/surveys/responses", handler.submitResponse)
 }
 
@@ -57,6 +59,30 @@ func (handler *SurveyHandler) createTemplate(c *gin.Context) {
         return
     }
     respondCreated(c, template)
+}
+
+func (handler *SurveyHandler) updateTemplate(c *gin.Context) {
+    templateID := c.Param("id")
+    var req service.SurveyTemplateRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        respondError(c, http.StatusBadRequest, "payload tidak valid")
+        return
+    }
+    template, err := handler.surveys.UpdateTemplate(templateID, req)
+    if err != nil {
+        respondError(c, http.StatusBadRequest, err.Error())
+        return
+    }
+    respondOK(c, template)
+}
+
+func (handler *SurveyHandler) deleteTemplate(c *gin.Context) {
+    templateID := c.Param("id")
+    if err := handler.surveys.DeleteTemplate(templateID); err != nil {
+        respondError(c, http.StatusBadRequest, err.Error())
+        return
+    }
+    respondOK(c, gin.H{"deleted": true})
 }
 
 func (handler *SurveyHandler) submitResponse(c *gin.Context) {

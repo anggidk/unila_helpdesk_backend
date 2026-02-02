@@ -3,6 +3,7 @@ package service
 import (
     "encoding/json"
     "errors"
+    "strconv"
     "strings"
     "time"
 
@@ -99,6 +100,57 @@ func (service *SurveyService) CreateTemplate(req SurveyTemplateRequest) (domain.
     return mapSurveyTemplate(template), nil
 }
 
+func (service *SurveyService) UpdateTemplate(templateID string, req SurveyTemplateRequest) (domain.SurveyTemplateDTO, error) {
+    if strings.TrimSpace(templateID) == "" {
+        return domain.SurveyTemplateDTO{}, errors.New("template id wajib diisi")
+    }
+    if strings.TrimSpace(req.Title) == "" {
+        return domain.SurveyTemplateDTO{}, errors.New("judul template wajib diisi")
+    }
+    if strings.TrimSpace(req.CategoryID) == "" {
+        return domain.SurveyTemplateDTO{}, errors.New("kategori wajib diisi")
+    }
+
+    template, err := service.surveys.FindByID(templateID)
+    if err != nil {
+        return domain.SurveyTemplateDTO{}, err
+    }
+
+    template.Title = strings.TrimSpace(req.Title)
+    template.Description = strings.TrimSpace(req.Description)
+    template.CategoryID = req.CategoryID
+    template.UpdatedAt = service.now()
+
+    questions := make([]domain.SurveyQuestion, 0, len(req.Questions))
+    for _, question := range req.Questions {
+        if strings.TrimSpace(question.Text) == "" {
+            continue
+        }
+        options, _ := json.Marshal(question.Options)
+        questions = append(questions, domain.SurveyQuestion{
+            ID:         util.NewUUID(),
+            TemplateID: template.ID,
+            Text:       strings.TrimSpace(question.Text),
+            Type:       domain.SurveyQuestionType(question.Type),
+            Options:    options,
+            CreatedAt:  service.now(),
+        })
+    }
+    template.Questions = questions
+
+    if err := service.surveys.ReplaceTemplate(template); err != nil {
+        return domain.SurveyTemplateDTO{}, err
+    }
+    return mapSurveyTemplate(*template), nil
+}
+
+func (service *SurveyService) DeleteTemplate(templateID string) error {
+    if strings.TrimSpace(templateID) == "" {
+        return errors.New("template id wajib diisi")
+    }
+    return service.surveys.DeleteTemplate(templateID)
+}
+
 func (service *SurveyService) SubmitSurvey(user domain.User, req SurveyResponseRequest) error {
     if user.Role != domain.RoleRegistered {
         return errors.New("hanya pengguna terdaftar yang dapat mengisi survey")
@@ -135,6 +187,7 @@ func (service *SurveyService) SubmitSurvey(user domain.User, req SurveyResponseR
         TicketID:  ticket.ID,
         UserID:    user.ID,
         Answers:   payload,
+        Score:     calculateSurveyScore(req.Answers),
         CreatedAt: service.now(),
     }
     if err := service.surveys.SaveResponse(&response); err != nil {
@@ -174,4 +227,55 @@ func mapSurveyTemplate(template domain.SurveyTemplate) domain.SurveyTemplateDTO 
         CategoryID:  template.CategoryID,
         Questions:   questions,
     }
+}
+
+func calculateSurveyScore(answers map[string]interface{}) float64 {
+    if len(answers) == 0 {
+        return 0
+    }
+    var total float64
+    var count int
+    for _, value := range answers {
+        switch v := value.(type) {
+        case float64:
+            if v >= 1 && v <= 5 {
+                total += v
+                count++
+            }
+        case int:
+            if v >= 1 && v <= 5 {
+                total += float64(v)
+                count++
+            }
+        case bool:
+            if v {
+                total += 5
+            } else {
+                total += 1
+            }
+            count++
+        case string:
+            cleaned := strings.ToLower(strings.TrimSpace(v))
+            if cleaned == "ya" || cleaned == "yes" || cleaned == "true" {
+                total += 5
+                count++
+                continue
+            }
+            if cleaned == "tidak" || cleaned == "no" || cleaned == "false" {
+                total += 1
+                count++
+                continue
+            }
+            if parsed, err := strconv.ParseFloat(cleaned, 64); err == nil {
+                if parsed >= 1 && parsed <= 5 {
+                    total += parsed
+                    count++
+                }
+            }
+        }
+    }
+    if count == 0 {
+        return 0
+    }
+    return total / float64(count)
 }
