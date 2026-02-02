@@ -13,6 +13,13 @@ type CategoryHandler struct {
     categories *repository.CategoryRepository
 }
 
+var hiddenCategoryIDs = map[string]struct{}{
+    "membership":     {},
+    "guest-account":  {},
+    "email":          {},
+    "vclass":         {},
+}
+
 func NewCategoryHandler(categories *repository.CategoryRepository) *CategoryHandler {
     return &CategoryHandler{categories: categories}
 }
@@ -28,7 +35,14 @@ func (handler *CategoryHandler) listAll(c *gin.Context) {
         respondError(c, http.StatusInternalServerError, err.Error())
         return
     }
-    respondOK(c, toCategoryDTOs(items))
+    filtered := make([]domain.ServiceCategory, 0, len(items))
+    for _, item := range items {
+        if isHiddenCategory(item.ID) {
+            continue
+        }
+        filtered = append(filtered, item)
+    }
+    respondOK(c, toCategoryDTOs(filtered))
 }
 
 func (handler *CategoryHandler) listGuest(c *gin.Context) {
@@ -39,11 +53,19 @@ func (handler *CategoryHandler) listGuest(c *gin.Context) {
     }
     filtered := make([]domain.ServiceCategory, 0)
     for _, item := range items {
+        if isHiddenCategory(item.ID) {
+            continue
+        }
         if item.GuestAllowed {
             filtered = append(filtered, item)
         }
     }
     respondOK(c, toCategoryDTOs(filtered))
+}
+
+func isHiddenCategory(id string) bool {
+    _, hidden := hiddenCategoryIDs[id]
+    return hidden
 }
 
 func toCategoryDTOs(items []domain.ServiceCategory) []domain.ServiceCategoryDTO {
