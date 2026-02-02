@@ -30,7 +30,7 @@ func Load() Config {
         Environment:       envString("APP_ENV", "development"),
         HTTPPort:          envString("HTTP_PORT", "8080"),
         BaseURL:           envString("BASE_URL", "http://localhost:8080"),
-        JWTSecret:         envString("JWT_SECRET", "change-me"),
+        JWTSecret:         envString("JWT_SECRET", ""),
         JWTExpiry:         jwtExpiry,
         DatabaseURL:       envString("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/unila_helpdesk?sslmode=disable"),
         DatabaseMaxConns:  envInt("DB_MAX_CONNS", 10),
