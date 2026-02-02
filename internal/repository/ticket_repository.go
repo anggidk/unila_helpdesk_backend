@@ -96,3 +96,26 @@ func (repo *TicketRepository) UpdateStatus(ticketID string, status domain.Ticket
         "survey_required": surveyRequired,
     }).Error
 }
+
+func (repo *TicketRepository) GetSurveyScores(ticketIDs []string) (map[string]float64, error) {
+    scores := make(map[string]float64)
+    if len(ticketIDs) == 0 {
+        return scores, nil
+    }
+    type row struct {
+        TicketID string
+        AvgScore float64
+    }
+    var rows []row
+    if err := repo.db.Model(&domain.SurveyResponse{}).
+        Select("ticket_id, AVG(score) as avg_score").
+        Where("ticket_id IN ?", ticketIDs).
+        Group("ticket_id").
+        Scan(&rows).Error; err != nil {
+        return nil, err
+    }
+    for _, item := range rows {
+        scores[item.TicketID] = item.AvgScore
+    }
+    return scores, nil
+}

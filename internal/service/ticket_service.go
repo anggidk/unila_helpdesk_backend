@@ -4,6 +4,7 @@ import (
     "context"
     "errors"
     "fmt"
+    "log"
     "strings"
     "time"
 
@@ -82,16 +83,19 @@ func (service *TicketService) CreateTicket(ctx context.Context, user domain.User
         return domain.TicketDTO{}, err
     }
 
+    autoResolved := domain.StatusResolved
+    surveyRequired := user.Role == domain.RoleRegistered
     ticket := domain.Ticket{
         ID:           ticketID,
         Title:        strings.TrimSpace(req.Title),
         Description:  strings.TrimSpace(req.Description),
         CategoryID:   category.ID,
         Priority:     req.Priority,
-        Status:       domain.StatusWaiting,
+        Status:       autoResolved,
         ReporterID:   user.ID,
         ReporterName: user.Name,
         IsGuest:      user.Role == domain.RoleGuest,
+        SurveyRequired: surveyRequired,
         CreatedAt:    service.now(),
         UpdatedAt:    service.now(),
     }
@@ -109,7 +113,15 @@ func (service *TicketService) CreateTicket(ctx context.Context, user domain.User
     }
     _ = service.tickets.AddHistory(&history)
 
-    return service.toTicketDTO(ticket, *category), nil
+    _ = service.tickets.AddHistory(&domain.TicketHistory{
+        ID:          util.NewUUID(),
+        TicketID:    ticket.ID,
+        Title:       "Status Updated",
+        Description: fmt.Sprintf("Status diperbarui ke %s", ticket.Status),
+        Timestamp:   service.now(),
+    })
+
+    return service.toTicketDTO(ticket, *category, 0), nil
 }
 
 func (service *TicketService) UpdateTicket(ctx context.Context, user domain.User, ticketID string, req TicketUpdateRequest) (domain.TicketDTO, error) {
@@ -165,25 +177,33 @@ func (service *TicketService) UpdateTicket(ctx context.Context, user domain.User
         historyDesc = fmt.Sprintf("Status diperbarui ke %s", ticket.Status)
     }
 
-    _ = service.tickets.AddHistory(&domain.TicketHistory{
+    if err := service.tickets.AddHistory(&domain.TicketHistory{
         ID:          util.NewUUID(),
         TicketID:    ticket.ID,
         Title:       historyTitle,
         Description: historyDesc,
         Timestamp:   service.now(),
-    })
+    }); err != nil {
+        log.Printf("failed to add ticket history: %v", err)
+    }
 
     if statusChanged {
         surveyRequired := ticket.Status == domain.StatusResolved && !ticket.IsGuest
         ticket.SurveyRequired = surveyRequired
-        _ = service.tickets.UpdateStatus(ticket.ID, ticket.Status, surveyRequired)
-        _ = service.notifyTicketStatus(ctx, *ticket, "Status Tiket Diperbarui", fmt.Sprintf("%s kini berstatus %s", ticket.ID, ticket.Status))
+        if err := service.tickets.UpdateStatus(ticket.ID, ticket.Status, surveyRequired); err != nil {
+            log.Printf("failed to update status: %v", err)
+        }
+        if err := service.notifyTicketStatus(ctx, *ticket, "Status Tiket Diperbarui", fmt.Sprintf("%s kini berstatus %s", ticket.ID, ticket.Status)); err != nil {
+            log.Printf("failed to send status notification: %v", err)
+        }
         if surveyRequired {
-            _ = service.notifyTicketStatus(ctx, *ticket, "Kuesioner Menunggu", fmt.Sprintf("Isi survey kepuasan untuk %s.", ticket.ID))
+            if err := service.notifyTicketStatus(ctx, *ticket, "Kuesioner Menunggu", fmt.Sprintf("Isi survey kepuasan untuk %s.", ticket.ID)); err != nil {
+                log.Printf("failed to send survey notification: %v", err)
+            }
         }
     }
 
-    return service.toTicketDTO(*ticket, ticket.Category), nil
+    return service.toTicketDTO(*ticket, ticket.Category, 0), nil
 }
 
 func (service *TicketService) DeleteTicket(user domain.User, ticketID string) error {
@@ -202,11 +222,16 @@ func (service *TicketService) GetTicket(user *domain.User, ticketID string) (dom
     if err != nil {
         return domain.TicketDTO{}, err
     }
+    scores, err := service.tickets.GetSurveyScores([]string{ticket.ID})
+    if err != nil {
+        return domain.TicketDTO{}, err
+    }
+    score := scores[ticket.ID]
     if user != nil && (user.Role == domain.RoleAdmin || ticket.ReporterID == user.ID) {
-        return service.toTicketDTO(*ticket, ticket.Category), nil
+        return service.toTicketDTO(*ticket, ticket.Category, score), nil
     }
     if ticket.IsGuest {
-        return service.toTicketDTO(*ticket, ticket.Category), nil
+        return service.toTicketDTO(*ticket, ticket.Category, score), nil
     }
     return domain.TicketDTO{}, errors.New("tidak memiliki akses untuk tiket ini")
 }
@@ -222,7 +247,11 @@ func (service *TicketService) ListTickets(user domain.User) ([]domain.TicketDTO,
     if err != nil {
         return nil, err
     }
-    return service.mapTickets(tickets), nil
+    scores, err := service.tickets.GetSurveyScores(ticketIDs(tickets))
+    if err != nil {
+        return nil, err
+    }
+    return service.mapTickets(tickets, scores), nil
 }
 
 func (service *TicketService) SearchTickets(query string, guestOnly bool) ([]domain.TicketDTO, error) {
@@ -230,7 +259,11 @@ func (service *TicketService) SearchTickets(query string, guestOnly bool) ([]dom
     if err != nil {
         return nil, err
     }
-    return service.mapTickets(tickets), nil
+    scores, err := service.tickets.GetSurveyScores(ticketIDs(tickets))
+    if err != nil {
+        return nil, err
+    }
+    return service.mapTickets(tickets, scores), nil
 }
 
 func (service *TicketService) AddComment(user domain.User, ticketID string, message string) (domain.TicketDTO, error) {
@@ -256,7 +289,7 @@ func (service *TicketService) AddComment(user domain.User, ticketID string, mess
     if err := service.tickets.AddComment(&comment); err != nil {
         return domain.TicketDTO{}, err
     }
-    return service.toTicketDTO(*ticket, ticket.Category), nil
+    return service.toTicketDTO(*ticket, ticket.Category, 0), nil
 }
 
 func (service *TicketService) resolveCategory(value string) (*domain.ServiceCategory, error) {
@@ -283,7 +316,7 @@ func (service *TicketService) generateTicketID() (string, error) {
     return fmt.Sprintf("TK-%d-%03d", year, count+1), nil
 }
 
-func (service *TicketService) toTicketDTO(ticket domain.Ticket, category domain.ServiceCategory) domain.TicketDTO {
+func (service *TicketService) toTicketDTO(ticket domain.Ticket, category domain.ServiceCategory, surveyScore float64) domain.TicketDTO {
     history := make([]domain.TicketHistoryDTO, 0, len(ticket.History))
     for _, item := range ticket.History {
         history = append(history, domain.TicketHistoryDTO{
@@ -326,15 +359,25 @@ func (service *TicketService) toTicketDTO(ticket domain.Ticket, category domain.
         History:       history,
         Comments:      comments,
         SurveyRequired: ticket.SurveyRequired,
+        SurveyScore:   surveyScore,
     }
 }
 
-func (service *TicketService) mapTickets(tickets []domain.Ticket) []domain.TicketDTO {
+func (service *TicketService) mapTickets(tickets []domain.Ticket, scores map[string]float64) []domain.TicketDTO {
     result := make([]domain.TicketDTO, 0, len(tickets))
     for _, ticket := range tickets {
-        result = append(result, service.toTicketDTO(ticket, ticket.Category))
+        score := scores[ticket.ID]
+        result = append(result, service.toTicketDTO(ticket, ticket.Category, score))
     }
     return result
+}
+
+func ticketIDs(tickets []domain.Ticket) []string {
+    ids := make([]string, 0, len(tickets))
+    for _, ticket := range tickets {
+        ids = append(ids, ticket.ID)
+    }
+    return ids
 }
 
 func (service *TicketService) notifyTicketStatus(ctx context.Context, ticket domain.Ticket, title string, message string) error {
@@ -346,10 +389,13 @@ func (service *TicketService) notifyTicketStatus(ctx context.Context, ticket dom
         IsRead:    false,
         CreatedAt: service.now(),
     }
-    _ = service.notifications.Create(&notification)
+    if err := service.notifications.Create(&notification); err != nil {
+        log.Printf("failed to create notification: %v", err)
+    }
 
     tokens, err := service.tokens.ListTokens(ticket.ReporterID)
     if err != nil {
+        log.Printf("failed to list tokens: %v", err)
         return err
     }
     tokenValues := make([]string, 0, len(tokens))
