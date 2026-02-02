@@ -46,6 +46,7 @@ func main() {
     reportService := service.NewReportService(database)
 
     authHandler := handler.NewAuthHandler(authService)
+    categoryHandler := handler.NewCategoryHandler(categoryRepo)
     ticketHandler := handler.NewTicketHandler(ticketService)
     surveyHandler := handler.NewSurveyHandler(surveyService)
     notificationHandler := handler.NewNotificationHandler(notificationService)
@@ -66,6 +67,7 @@ func main() {
     })
 
     authHandler.RegisterRoutes(api)
+    categoryHandler.RegisterRoutes(public)
     ticketHandler.RegisterRoutes(public, authGroup)
     surveyHandler.RegisterRoutes(public, authGroup, adminGroup)
     notificationHandler.RegisterRoutes(authGroup)
