@@ -19,8 +19,23 @@ func NewReportHandler(reports *service.ReportService) *ReportHandler {
 }
 
 func (handler *ReportHandler) RegisterRoutes(admin *gin.RouterGroup) {
+    admin.GET("/reports/summary", handler.dashboardSummary)
     admin.GET("/reports", handler.serviceTrends)
+    admin.GET("/reports/satisfaction-summary", handler.satisfactionSummary)
     admin.GET("/reports/cohort", handler.cohortReport)
+    admin.GET("/reports/satisfaction", handler.surveySatisfaction)
+    admin.GET("/reports/usage", handler.usageCohort)
+    admin.GET("/reports/service-utilization", handler.serviceUtilization)
+    admin.GET("/reports/entity-service", handler.entityService)
+}
+
+func (handler *ReportHandler) dashboardSummary(c *gin.Context) {
+    summary, err := handler.reports.DashboardSummary()
+    if err != nil {
+        respondError(c, http.StatusInternalServerError, err.Error())
+        return
+    }
+    respondOK(c, summary)
 }
 
 func (handler *ReportHandler) serviceTrends(c *gin.Context) {
@@ -44,14 +59,121 @@ func (handler *ReportHandler) serviceTrends(c *gin.Context) {
     respondOK(c, trends)
 }
 
-func (handler *ReportHandler) cohortReport(c *gin.Context) {
-    months := 5
-    if raw := c.Query("months"); raw != "" {
+func (handler *ReportHandler) satisfactionSummary(c *gin.Context) {
+    periods := 6
+    if raw := c.Query("periods"); raw != "" {
         if parsed, err := strconv.Atoi(raw); err == nil {
-            months = parsed
+            periods = parsed
+        }
+    } else if raw := c.Query("months"); raw != "" {
+        if parsed, err := strconv.Atoi(raw); err == nil {
+            periods = parsed
         }
     }
-    rows, err := handler.reports.CohortReport(months)
+    period := c.DefaultQuery("period", "monthly")
+    rows, err := handler.reports.ServiceSatisfactionSummary(period, periods)
+    if err != nil {
+        respondError(c, http.StatusInternalServerError, err.Error())
+        return
+    }
+    respondOK(c, rows)
+}
+
+func (handler *ReportHandler) cohortReport(c *gin.Context) {
+    periods := 5
+    if raw := c.Query("periods"); raw != "" {
+        if parsed, err := strconv.Atoi(raw); err == nil {
+            periods = parsed
+        }
+    } else if raw := c.Query("months"); raw != "" {
+        if parsed, err := strconv.Atoi(raw); err == nil {
+            periods = parsed
+        }
+    }
+    period := c.DefaultQuery("period", "monthly")
+    rows, err := handler.reports.CohortReport(period, periods)
+    if err != nil {
+        respondError(c, http.StatusInternalServerError, err.Error())
+        return
+    }
+    respondOK(c, rows)
+}
+
+func (handler *ReportHandler) surveySatisfaction(c *gin.Context) {
+    periods := 5
+    if raw := c.Query("periods"); raw != "" {
+        if parsed, err := strconv.Atoi(raw); err == nil {
+            periods = parsed
+        }
+    } else if raw := c.Query("months"); raw != "" {
+        if parsed, err := strconv.Atoi(raw); err == nil {
+            periods = parsed
+        }
+    }
+    period := c.DefaultQuery("period", "monthly")
+    categoryID := c.Query("categoryId")
+    templateID := c.Query("templateId")
+    report, err := handler.reports.SurveySatisfaction(categoryID, templateID, period, periods)
+    if err != nil {
+        respondError(c, http.StatusBadRequest, err.Error())
+        return
+    }
+    respondOK(c, report)
+}
+
+func (handler *ReportHandler) usageCohort(c *gin.Context) {
+    periods := 5
+    if raw := c.Query("periods"); raw != "" {
+        if parsed, err := strconv.Atoi(raw); err == nil {
+            periods = parsed
+        }
+    } else if raw := c.Query("months"); raw != "" {
+        if parsed, err := strconv.Atoi(raw); err == nil {
+            periods = parsed
+        }
+    }
+    period := c.DefaultQuery("period", "monthly")
+    rows, err := handler.reports.UsageCohort(period, periods)
+    if err != nil {
+        respondError(c, http.StatusInternalServerError, err.Error())
+        return
+    }
+    respondOK(c, rows)
+}
+
+func (handler *ReportHandler) serviceUtilization(c *gin.Context) {
+    periods := 5
+    if raw := c.Query("periods"); raw != "" {
+        if parsed, err := strconv.Atoi(raw); err == nil {
+            periods = parsed
+        }
+    } else if raw := c.Query("months"); raw != "" {
+        if parsed, err := strconv.Atoi(raw); err == nil {
+            periods = parsed
+        }
+    }
+    period := c.DefaultQuery("period", "monthly")
+    rows, err := handler.reports.ServiceUtilizationCohort(period, periods)
+    if err != nil {
+        respondError(c, http.StatusInternalServerError, err.Error())
+        return
+    }
+    respondOK(c, rows)
+}
+
+func (handler *ReportHandler) entityService(c *gin.Context) {
+    periods := 5
+    if raw := c.Query("periods"); raw != "" {
+        if parsed, err := strconv.Atoi(raw); err == nil {
+            periods = parsed
+        }
+    } else if raw := c.Query("months"); raw != "" {
+        if parsed, err := strconv.Atoi(raw); err == nil {
+            periods = parsed
+        }
+    }
+    period := c.DefaultQuery("period", "monthly")
+    rows, err := handler.reports.EntityServiceMatrix(period, periods)
     if err != nil {
         respondError(c, http.StatusInternalServerError, err.Error())
         return
