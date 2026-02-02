@@ -1,0 +1,362 @@
+package service
+
+import (
+    "context"
+    "errors"
+    "fmt"
+    "strings"
+    "time"
+
+    "unila_helpdesk_backend/internal/domain"
+    "unila_helpdesk_backend/internal/fcm"
+    "unila_helpdesk_backend/internal/repository"
+    "unila_helpdesk_backend/internal/util"
+)
+
+type TicketService struct {
+    tickets      *repository.TicketRepository
+    categories   *repository.CategoryRepository
+    notifications *repository.NotificationRepository
+    tokens       *repository.FCMTokenRepository
+    fcmClient    *fcm.Client
+    now          func() time.Time
+}
+
+type TicketCreateRequest struct {
+    Title       string              `json:"title"`
+    Description string              `json:"description"`
+    Category    string              `json:"category"`
+    Priority    domain.TicketPriority `json:"priority"`
+    Attachments []string            `json:"attachments"`
+}
+
+type TicketUpdateRequest struct {
+    Title       *string             `json:"title"`
+    Description *string             `json:"description"`
+    Category    *string             `json:"category"`
+    Priority    *domain.TicketPriority `json:"priority"`
+    Status      *domain.TicketStatus   `json:"status"`
+    Assignee    *string             `json:"assignee"`
+}
+
+func NewTicketService(
+    tickets *repository.TicketRepository,
+    categories *repository.CategoryRepository,
+    notifications *repository.NotificationRepository,
+    tokens *repository.FCMTokenRepository,
+    fcmClient *fcm.Client,
+) *TicketService {
+    return &TicketService{
+        tickets:      tickets,
+        categories:   categories,
+        notifications: notifications,
+        tokens:       tokens,
+        fcmClient:    fcmClient,
+        now:          time.Now,
+    }
+}
+
+func (service *TicketService) CreateTicket(ctx context.Context, user domain.User, req TicketCreateRequest) (domain.TicketDTO, error) {
+    if strings.TrimSpace(req.Title) == "" {
+        return domain.TicketDTO{}, errors.New("judul tiket wajib diisi")
+    }
+    if strings.TrimSpace(req.Description) == "" {
+        return domain.TicketDTO{}, errors.New("deskripsi tiket wajib diisi")
+    }
+
+    category, err := service.resolveCategory(req.Category)
+    if err != nil {
+        return domain.TicketDTO{}, err
+    }
+
+    if user.Role == domain.RoleGuest && !category.GuestAllowed {
+        return domain.TicketDTO{}, errors.New("guest hanya dapat membuat tiket keanggotaan")
+    }
+
+    if req.Priority == "" {
+        req.Priority = domain.PriorityMedium
+    }
+
+    ticketID, err := service.generateTicketID()
+    if err != nil {
+        return domain.TicketDTO{}, err
+    }
+
+    ticket := domain.Ticket{
+        ID:           ticketID,
+        Title:        strings.TrimSpace(req.Title),
+        Description:  strings.TrimSpace(req.Description),
+        CategoryID:   category.ID,
+        Priority:     req.Priority,
+        Status:       domain.StatusWaiting,
+        ReporterID:   user.ID,
+        ReporterName: user.Name,
+        IsGuest:      user.Role == domain.RoleGuest,
+        CreatedAt:    service.now(),
+        UpdatedAt:    service.now(),
+    }
+
+    if err := service.tickets.Create(&ticket); err != nil {
+        return domain.TicketDTO{}, err
+    }
+
+    history := domain.TicketHistory{
+        ID:          util.NewUUID(),
+        TicketID:    ticket.ID,
+        Title:       "Ticket Created",
+        Description: "Dilaporkan oleh pengguna",
+        Timestamp:   service.now(),
+    }
+    _ = service.tickets.AddHistory(&history)
+
+    return service.toTicketDTO(ticket, *category), nil
+}
+
+func (service *TicketService) UpdateTicket(ctx context.Context, user domain.User, ticketID string, req TicketUpdateRequest) (domain.TicketDTO, error) {
+    ticket, err := service.tickets.FindByID(ticketID)
+    if err != nil {
+        return domain.TicketDTO{}, err
+    }
+
+    if user.Role != domain.RoleAdmin && ticket.ReporterID != user.ID {
+        return domain.TicketDTO{}, errors.New("tidak memiliki akses untuk memperbarui tiket ini")
+    }
+
+    if req.Title != nil {
+        ticket.Title = strings.TrimSpace(*req.Title)
+    }
+    if req.Description != nil {
+        ticket.Description = strings.TrimSpace(*req.Description)
+    }
+    if req.Category != nil {
+        category, err := service.resolveCategory(*req.Category)
+        if err != nil {
+            return domain.TicketDTO{}, err
+        }
+        if user.Role == domain.RoleGuest && !category.GuestAllowed {
+            return domain.TicketDTO{}, errors.New("guest hanya dapat membuat tiket keanggotaan")
+        }
+        ticket.CategoryID = category.ID
+        ticket.Category = *category
+    }
+    if req.Priority != nil {
+        ticket.Priority = *req.Priority
+    }
+
+    statusChanged := false
+    if req.Status != nil && ticket.Status != *req.Status {
+        ticket.Status = *req.Status
+        statusChanged = true
+    }
+
+    if req.Assignee != nil {
+        ticket.Assignee = strings.TrimSpace(*req.Assignee)
+    }
+
+    ticket.UpdatedAt = service.now()
+    if err := service.tickets.Update(ticket); err != nil {
+        return domain.TicketDTO{}, err
+    }
+
+    historyTitle := "Ticket Updated"
+    historyDesc := "Perubahan tiket diperbarui"
+    if statusChanged {
+        historyTitle = "Status Updated"
+        historyDesc = fmt.Sprintf("Status diperbarui ke %s", ticket.Status)
+    }
+
+    _ = service.tickets.AddHistory(&domain.TicketHistory{
+        ID:          util.NewUUID(),
+        TicketID:    ticket.ID,
+        Title:       historyTitle,
+        Description: historyDesc,
+        Timestamp:   service.now(),
+    })
+
+    if statusChanged {
+        surveyRequired := ticket.Status == domain.StatusResolved && !ticket.IsGuest
+        ticket.SurveyRequired = surveyRequired
+        _ = service.tickets.UpdateStatus(ticket.ID, ticket.Status, surveyRequired)
+        _ = service.notifyTicketStatus(ctx, *ticket, "Status Tiket Diperbarui", fmt.Sprintf("%s kini berstatus %s", ticket.ID, ticket.Status))
+        if surveyRequired {
+            _ = service.notifyTicketStatus(ctx, *ticket, "Kuesioner Menunggu", fmt.Sprintf("Isi survey kepuasan untuk %s.", ticket.ID))
+        }
+    }
+
+    return service.toTicketDTO(*ticket, ticket.Category), nil
+}
+
+func (service *TicketService) DeleteTicket(user domain.User, ticketID string) error {
+    ticket, err := service.tickets.FindByID(ticketID)
+    if err != nil {
+        return err
+    }
+    if user.Role != domain.RoleAdmin && ticket.ReporterID != user.ID {
+        return errors.New("tidak memiliki akses untuk menghapus tiket ini")
+    }
+    return service.tickets.SoftDelete(ticketID)
+}
+
+func (service *TicketService) GetTicket(user *domain.User, ticketID string) (domain.TicketDTO, error) {
+    ticket, err := service.tickets.FindByID(ticketID)
+    if err != nil {
+        return domain.TicketDTO{}, err
+    }
+    if user != nil && (user.Role == domain.RoleAdmin || ticket.ReporterID == user.ID) {
+        return service.toTicketDTO(*ticket, ticket.Category), nil
+    }
+    if ticket.IsGuest {
+        return service.toTicketDTO(*ticket, ticket.Category), nil
+    }
+    return domain.TicketDTO{}, errors.New("tidak memiliki akses untuk tiket ini")
+}
+
+func (service *TicketService) ListTickets(user domain.User) ([]domain.TicketDTO, error) {
+    var tickets []domain.Ticket
+    var err error
+    if user.Role == domain.RoleAdmin {
+        tickets, err = service.tickets.ListAll()
+    } else {
+        tickets, err = service.tickets.ListByUser(user.ID)
+    }
+    if err != nil {
+        return nil, err
+    }
+    return service.mapTickets(tickets), nil
+}
+
+func (service *TicketService) SearchTickets(query string, guestOnly bool) ([]domain.TicketDTO, error) {
+    tickets, err := service.tickets.Search(query, guestOnly)
+    if err != nil {
+        return nil, err
+    }
+    return service.mapTickets(tickets), nil
+}
+
+func (service *TicketService) AddComment(user domain.User, ticketID string, message string) (domain.TicketDTO, error) {
+    if strings.TrimSpace(message) == "" {
+        return domain.TicketDTO{}, errors.New("komentar tidak boleh kosong")
+    }
+    ticket, err := service.tickets.FindByID(ticketID)
+    if err != nil {
+        return domain.TicketDTO{}, err
+    }
+    if user.Role != domain.RoleAdmin && ticket.ReporterID != user.ID {
+        return domain.TicketDTO{}, errors.New("tidak memiliki akses untuk menambah komentar")
+    }
+
+    comment := domain.TicketComment{
+        ID:        util.NewUUID(),
+        TicketID:  ticket.ID,
+        Author:    user.Name,
+        Message:   strings.TrimSpace(message),
+        IsStaff:   user.Role == domain.RoleAdmin,
+        Timestamp: service.now(),
+    }
+    if err := service.tickets.AddComment(&comment); err != nil {
+        return domain.TicketDTO{}, err
+    }
+    return service.toTicketDTO(*ticket, ticket.Category), nil
+}
+
+func (service *TicketService) resolveCategory(value string) (*domain.ServiceCategory, error) {
+    if strings.TrimSpace(value) == "" {
+        return nil, errors.New("kategori wajib diisi")
+    }
+    category, err := service.categories.FindByID(value)
+    if err == nil {
+        return category, nil
+    }
+    category, err = service.categories.FindByName(value)
+    if err != nil {
+        return nil, errors.New("kategori tidak ditemukan")
+    }
+    return category, nil
+}
+
+func (service *TicketService) generateTicketID() (string, error) {
+    year := service.now().Year()
+    count, err := service.tickets.CountForYear(year)
+    if err != nil {
+        return "", err
+    }
+    return fmt.Sprintf("TK-%d-%03d", year, count+1), nil
+}
+
+func (service *TicketService) toTicketDTO(ticket domain.Ticket, category domain.ServiceCategory) domain.TicketDTO {
+    history := make([]domain.TicketHistoryDTO, 0, len(ticket.History))
+    for _, item := range ticket.History {
+        history = append(history, domain.TicketHistoryDTO{
+            Title:       item.Title,
+            Description: item.Description,
+            Timestamp:   item.Timestamp,
+        })
+    }
+    comments := make([]domain.TicketCommentDTO, 0, len(ticket.Comments))
+    for _, item := range ticket.Comments {
+        comments = append(comments, domain.TicketCommentDTO{
+            Author:    item.Author,
+            Message:   item.Message,
+            Timestamp: item.Timestamp,
+            IsStaff:   item.IsStaff,
+        })
+    }
+
+    categoryName := category.Name
+    categoryID := category.ID
+    if categoryName == "" {
+        categoryName = ticket.Category.Name
+    }
+    if categoryID == "" {
+        categoryID = ticket.Category.ID
+    }
+
+    return domain.TicketDTO{
+        ID:            ticket.ID,
+        Title:         ticket.Title,
+        Description:   ticket.Description,
+        Category:      categoryName,
+        CategoryID:    categoryID,
+        Status:        ticket.Status,
+        Priority:      ticket.Priority,
+        CreatedAt:     ticket.CreatedAt,
+        Reporter:      ticket.ReporterName,
+        IsGuest:       ticket.IsGuest,
+        Assignee:      ticket.Assignee,
+        History:       history,
+        Comments:      comments,
+        SurveyRequired: ticket.SurveyRequired,
+    }
+}
+
+func (service *TicketService) mapTickets(tickets []domain.Ticket) []domain.TicketDTO {
+    result := make([]domain.TicketDTO, 0, len(tickets))
+    for _, ticket := range tickets {
+        result = append(result, service.toTicketDTO(ticket, ticket.Category))
+    }
+    return result
+}
+
+func (service *TicketService) notifyTicketStatus(ctx context.Context, ticket domain.Ticket, title string, message string) error {
+    notification := domain.Notification{
+        ID:        util.NewUUID(),
+        UserID:    ticket.ReporterID,
+        Title:     title,
+        Message:   message,
+        IsRead:    false,
+        CreatedAt: service.now(),
+    }
+    _ = service.notifications.Create(&notification)
+
+    tokens, err := service.tokens.ListTokens(ticket.ReporterID)
+    if err != nil {
+        return err
+    }
+    tokenValues := make([]string, 0, len(tokens))
+    for _, token := range tokens {
+        tokenValues = append(tokenValues, token.Token)
+    }
+    return service.fcmClient.SendToTokens(ctx, tokenValues, title, message, map[string]string{
+        "ticket_id": ticket.ID,
+    })
+}
