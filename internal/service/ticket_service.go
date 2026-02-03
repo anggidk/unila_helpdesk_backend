@@ -227,7 +227,10 @@ func (service *TicketService) GetTicket(user *domain.User, ticketID string) (dom
         return domain.TicketDTO{}, err
     }
     score := scores[ticket.ID]
-    if user != nil && (user.Role == domain.RoleAdmin || ticket.ReporterID == user.ID) {
+    if user == nil {
+        return service.toTicketDTO(*ticket, ticket.Category, score), nil
+    }
+    if user.Role == domain.RoleAdmin || ticket.ReporterID == user.ID {
         return service.toTicketDTO(*ticket, ticket.Category, score), nil
     }
     if ticket.IsGuest {

@@ -50,7 +50,7 @@ func (handler *TicketHandler) searchTickets(c *gin.Context) {
     query := c.Query("q")
     user, hasUser := middleware.GetUser(c)
     guestOnly := false
-    if !hasUser || user.Role == domain.RoleGuest {
+    if hasUser && user.Role == domain.RoleGuest {
         guestOnly = true
     }
 
