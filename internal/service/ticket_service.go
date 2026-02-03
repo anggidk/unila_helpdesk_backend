@@ -193,9 +193,6 @@ func (service *TicketService) UpdateTicket(ctx context.Context, user domain.User
         if err := service.tickets.UpdateStatus(ticket.ID, ticket.Status, surveyRequired); err != nil {
             log.Printf("failed to update status: %v", err)
         }
-        if err := service.notifyTicketStatus(ctx, *ticket, "Status Tiket Diperbarui", fmt.Sprintf("%s kini berstatus %s", ticket.ID, ticket.Status)); err != nil {
-            log.Printf("failed to send status notification: %v", err)
-        }
         if surveyRequired {
             if err := service.notifyTicketStatus(ctx, *ticket, "Kuesioner Menunggu", fmt.Sprintf("Isi survey kepuasan untuk %s.", ticket.ID)); err != nil {
                 log.Printf("failed to send survey notification: %v", err)

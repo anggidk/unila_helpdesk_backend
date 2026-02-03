@@ -31,6 +31,19 @@ Thumbs.db
 
 # Env files
 .env
+.env.*
 
 # Logs
 *.log
+
+# Security sensitive files
+cmd/seed/main.go
+**/seed/**
+secrets/
+*.pem
+*.key
+
+# Firebase & API credentials
+**/google-services.json
+**/GoogleService-Info.plist
+firebase-adminsdk-*.json
