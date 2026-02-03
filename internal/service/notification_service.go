@@ -47,6 +47,9 @@ func (service *NotificationService) List(user domain.User) ([]domain.Notificatio
 }
 
 func (service *NotificationService) RegisterToken(user domain.User, req FCMRegisterRequest) error {
+    if user.Role == domain.RoleGuest {
+        return nil
+    }
     if strings.TrimSpace(req.Token) == "" {
         return nil
     }
