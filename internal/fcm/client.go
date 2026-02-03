@@ -3,6 +3,7 @@ package fcm
 import (
     "context"
     "log"
+    "strings"
 
     firebase "firebase.google.com/go/v4"
     "firebase.google.com/go/v4/messaging"
@@ -35,14 +36,35 @@ func (client *Client) SendToTokens(ctx context.Context, tokens []string, title s
     if !client.enabled || client.sender == nil || len(tokens) == 0 {
         return nil
     }
-    message := &messaging.MulticastMessage{
-        Tokens: tokens,
-        Notification: &messaging.Notification{
-            Title: title,
-            Body:  body,
-        },
-        Data: data,
+    successCount := 0
+    failureCount := 0
+    var lastErr error
+
+    for index, token := range tokens {
+        if strings.TrimSpace(token) == "" {
+            continue
+        }
+        message := &messaging.Message{
+            Token: token,
+            Notification: &messaging.Notification{
+                Title: title,
+                Body:  body,
+            },
+            Data: data,
+        }
+        if _, err := client.sender.Send(ctx, message); err != nil {
+            failureCount++
+            lastErr = err
+            tokenHint := token
+            if len(tokenHint) > 10 {
+                tokenHint = tokenHint[:10] + "..."
+            }
+            log.Printf("fcm send failed token[%d]=%s: %v", index, tokenHint, err)
+            continue
+        }
+        successCount++
     }
-    _, err := client.sender.SendMulticast(ctx, message)
-    return err
+
+    log.Printf("fcm sent: success=%d failure=%d", successCount, failureCount)
+    return lastErr
 }

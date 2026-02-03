@@ -125,6 +125,7 @@ func AutoMigrate(database *gorm.DB) error {
         &domain.SurveyResponse{},
         &domain.Notification{},
         &domain.FCMToken{},
+        &domain.RefreshToken{},
     )
 }
 

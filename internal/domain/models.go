@@ -148,3 +148,11 @@ type FCMToken struct {
     CreatedAt time.Time
     UpdatedAt time.Time
 }
+
+type RefreshToken struct {
+    ID        string    `gorm:"primaryKey;type:varchar(36)"`
+    UserID    string    `gorm:"size:36;index"`
+    TokenHash string    `gorm:"size:64;uniqueIndex"`
+    ExpiresAt time.Time `gorm:"index"`
+    CreatedAt time.Time
+}

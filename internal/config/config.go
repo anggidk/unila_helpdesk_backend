@@ -14,6 +14,11 @@ type Config struct {
     BaseURL           string
     JWTSecret         string
     JWTExpiry         time.Duration
+    JWTExpiryUser     time.Duration
+    JWTExpiryAdmin    time.Duration
+    JWTRefreshExpiry     time.Duration
+    JWTRefreshExpiryUser time.Duration
+    JWTRefreshExpiryAdmin time.Duration
     DatabaseURL       string
     DatabaseMaxConns  int
     DatabaseIdleConns int
@@ -25,6 +30,11 @@ type Config struct {
 
 func Load() Config {
     jwtExpiry := envDuration("JWT_EXPIRY", 24*time.Hour)
+    jwtExpiryUser := envDuration("JWT_EXPIRY_USER", jwtExpiry)
+    jwtExpiryAdmin := envDuration("JWT_EXPIRY_ADMIN", jwtExpiry)
+    jwtRefreshExpiry := envDuration("JWT_REFRESH_EXPIRY", 30*24*time.Hour)
+    jwtRefreshExpiryUser := envDuration("JWT_REFRESH_EXPIRY_USER", jwtRefreshExpiry)
+    jwtRefreshExpiryAdmin := envDuration("JWT_REFRESH_EXPIRY_ADMIN", jwtRefreshExpiry)
     return Config{
         AppName:           envString("APP_NAME", "Unila Helpdesk API"),
         Environment:       envString("APP_ENV", "development"),
@@ -32,6 +42,11 @@ func Load() Config {
         BaseURL:           envString("BASE_URL", "http://localhost:8080"),
         JWTSecret:         envString("JWT_SECRET", ""),
         JWTExpiry:         jwtExpiry,
+        JWTExpiryUser:     jwtExpiryUser,
+        JWTExpiryAdmin:    jwtExpiryAdmin,
+        JWTRefreshExpiry:     jwtRefreshExpiry,
+        JWTRefreshExpiryUser: jwtRefreshExpiryUser,
+        JWTRefreshExpiryAdmin: jwtRefreshExpiryAdmin,
         DatabaseURL:       envString("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/unila_helpdesk?sslmode=disable"),
         DatabaseMaxConns:  envInt("DB_MAX_CONNS", 10),
         DatabaseIdleConns: envInt("DB_IDLE_CONNS", 5),
