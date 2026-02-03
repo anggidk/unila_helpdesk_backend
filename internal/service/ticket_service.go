@@ -31,6 +31,15 @@ type TicketCreateRequest struct {
     Attachments []string            `json:"attachments"`
 }
 
+type GuestTicketCreateRequest struct {
+    Title        string               `json:"title"`
+    Description  string               `json:"description"`
+    Category     string               `json:"category"`
+    Priority     domain.TicketPriority `json:"priority"`
+    Attachments  []string             `json:"attachments"`
+    ReporterName string               `json:"reporter_name"`
+}
+
 type TicketUpdateRequest struct {
     Title       *string             `json:"title"`
     Description *string             `json:"description"`
@@ -131,6 +140,74 @@ func (service *TicketService) CreateTicket(ctx context.Context, user domain.User
             log.Printf("failed to send survey notification: %v", err)
         }
     }
+
+    return service.toTicketDTO(ticket, *category, 0), nil
+}
+
+func (service *TicketService) CreateGuestTicket(ctx context.Context, req GuestTicketCreateRequest) (domain.TicketDTO, error) {
+    if strings.TrimSpace(req.Title) == "" {
+        return domain.TicketDTO{}, errors.New("judul tiket wajib diisi")
+    }
+    if strings.TrimSpace(req.Description) == "" {
+        return domain.TicketDTO{}, errors.New("deskripsi tiket wajib diisi")
+    }
+
+    category, err := service.resolveCategory(req.Category)
+    if err != nil {
+        return domain.TicketDTO{}, err
+    }
+    if !category.GuestAllowed {
+        return domain.TicketDTO{}, errors.New("guest hanya dapat membuat tiket keanggotaan")
+    }
+    if req.Priority == "" {
+        req.Priority = domain.PriorityMedium
+    }
+
+    ticketID, err := service.generateTicketID()
+    if err != nil {
+        return domain.TicketDTO{}, err
+    }
+
+    reporterName := strings.TrimSpace(req.ReporterName)
+    if reporterName == "" {
+        reporterName = "Guest User"
+    }
+
+    ticket := domain.Ticket{
+        ID:             ticketID,
+        Title:          strings.TrimSpace(req.Title),
+        Description:    strings.TrimSpace(req.Description),
+        CategoryID:     category.ID,
+        Priority:       req.Priority,
+        Status:         domain.StatusResolved,
+        ReporterID:     "",
+        ReporterName:   reporterName,
+        IsGuest:        true,
+        SurveyRequired: false,
+        CreatedAt:      service.now(),
+        UpdatedAt:      service.now(),
+    }
+
+    if err := service.tickets.Create(&ticket); err != nil {
+        return domain.TicketDTO{}, err
+    }
+
+    history := domain.TicketHistory{
+        ID:          util.NewUUID(),
+        TicketID:    ticket.ID,
+        Title:       "Ticket Created",
+        Description: "Dilaporkan oleh guest",
+        Timestamp:   service.now(),
+    }
+    _ = service.tickets.AddHistory(&history)
+
+    _ = service.tickets.AddHistory(&domain.TicketHistory{
+        ID:          util.NewUUID(),
+        TicketID:    ticket.ID,
+        Title:       "Status Updated",
+        Description: fmt.Sprintf("Status diperbarui ke %s", ticket.Status),
+        Timestamp:   service.now(),
+    })
 
     return service.toTicketDTO(ticket, *category, 0), nil
 }
