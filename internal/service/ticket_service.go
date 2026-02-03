@@ -121,6 +121,17 @@ func (service *TicketService) CreateTicket(ctx context.Context, user domain.User
         Timestamp:   service.now(),
     })
 
+    if ticket.Status == domain.StatusResolved && ticket.SurveyRequired {
+        if err := service.notifyTicketStatus(
+            ctx,
+            ticket,
+            "Tiket Selesai Ditangani",
+            fmt.Sprintf("Tiket %s selesai ditangani. Mohon isi feedback.", ticket.ID),
+        ); err != nil {
+            log.Printf("failed to send survey notification: %v", err)
+        }
+    }
+
     return service.toTicketDTO(ticket, *category, 0), nil
 }
 
@@ -194,7 +205,12 @@ func (service *TicketService) UpdateTicket(ctx context.Context, user domain.User
             log.Printf("failed to update status: %v", err)
         }
         if surveyRequired {
-            if err := service.notifyTicketStatus(ctx, *ticket, "Kuesioner Menunggu", fmt.Sprintf("Isi survey kepuasan untuk %s.", ticket.ID)); err != nil {
+            if err := service.notifyTicketStatus(
+                ctx,
+                *ticket,
+                "Tiket Selesai Ditangani",
+                fmt.Sprintf("Tiket %s selesai ditangani. Mohon isi feedback.", ticket.ID),
+            ); err != nil {
                 log.Printf("failed to send survey notification: %v", err)
             }
         }
