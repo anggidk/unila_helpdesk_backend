@@ -134,33 +134,6 @@ func (service *AuthService) LoginWithPassword(username string, password string) 
     return service.IssueToken(*user)
 }
 
-func (service *AuthService) GuestLogin(name string, email string) (AuthResult, error) {
-    cleanedName := strings.TrimSpace(name)
-    if cleanedName == "" {
-        cleanedName = "Guest User"
-    }
-    cleanedEmail := strings.TrimSpace(email)
-    if cleanedEmail == "" {
-        cleanedEmail = strings.ToLower(strings.ReplaceAll(cleanedName, " ", ".")) + "@guest.local"
-    }
-
-    user := domain.User{
-        ID:           util.NewUUID(),
-        Username:     strings.ToLower(cleanedEmail),
-        Name:         cleanedName,
-        Email:        cleanedEmail,
-        Role:         domain.RoleGuest,
-        Entity:       "Guest",
-        PasswordHash: "",
-    }
-
-    if err := service.users.UpsertByEmail(&user); err != nil {
-        return AuthResult{}, err
-    }
-
-    return service.IssueToken(user)
-}
-
 func (service *AuthService) RefreshWithToken(refreshToken string) (AuthResult, error) {
     token := strings.TrimSpace(refreshToken)
     if token == "" {
