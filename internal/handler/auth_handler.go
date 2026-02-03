@@ -22,6 +22,10 @@ type guestRequest struct {
     Email string `json:"email"`
 }
 
+type refreshRequest struct {
+    RefreshToken string `json:"refresh_token"`
+}
+
 func NewAuthHandler(auth *service.AuthService) *AuthHandler {
     return &AuthHandler{auth: auth}
 }
@@ -29,6 +33,7 @@ func NewAuthHandler(auth *service.AuthService) *AuthHandler {
 func (handler *AuthHandler) RegisterRoutes(router *gin.RouterGroup) {
     router.POST("/auth/login", handler.login)
     router.POST("/auth/guest", handler.guestLogin)
+    router.POST("/auth/refresh", handler.refreshToken)
 }
 
 func (handler *AuthHandler) login(c *gin.Context) {
@@ -54,6 +59,20 @@ func (handler *AuthHandler) guestLogin(c *gin.Context) {
     result, err := handler.auth.GuestLogin(req.Name, req.Email)
     if err != nil {
         respondError(c, http.StatusBadRequest, err.Error())
+        return
+    }
+    respondOK(c, result)
+}
+
+func (handler *AuthHandler) refreshToken(c *gin.Context) {
+    var req refreshRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        respondError(c, http.StatusBadRequest, "payload tidak valid")
+        return
+    }
+    result, err := handler.auth.RefreshWithToken(req.RefreshToken)
+    if err != nil {
+        respondError(c, http.StatusUnauthorized, err.Error())
         return
     }
     respondOK(c, result)

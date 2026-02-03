@@ -1,6 +1,10 @@
 package service
 
 import (
+    "crypto/rand"
+    "crypto/sha256"
+    "encoding/base64"
+    "encoding/hex"
     "errors"
     "strings"
     "time"
@@ -15,24 +19,32 @@ import (
 )
 
 type AuthService struct {
-    cfg    config.Config
-    users  *repository.UserRepository
-    jwtKey []byte
-    now    func() time.Time
+    cfg           config.Config
+    users         *repository.UserRepository
+    refreshTokens *repository.RefreshTokenRepository
+    jwtKey        []byte
+    now           func() time.Time
 }
 
 type AuthResult struct {
-    Token     string         `json:"token"`
-    ExpiresAt time.Time      `json:"expiresAt"`
-    User      domain.UserDTO `json:"user"`
+    Token            string         `json:"token"`
+    ExpiresAt        time.Time      `json:"expiresAt"`
+    RefreshToken     string         `json:"refreshToken"`
+    RefreshExpiresAt time.Time      `json:"refreshExpiresAt"`
+    User             domain.UserDTO `json:"user"`
 }
 
-func NewAuthService(cfg config.Config, users *repository.UserRepository) *AuthService {
+func NewAuthService(
+    cfg config.Config,
+    users *repository.UserRepository,
+    refreshTokens *repository.RefreshTokenRepository,
+) *AuthService {
     return &AuthService{
-        cfg:    cfg,
-        users:  users,
-        jwtKey: []byte(cfg.JWTSecret),
-        now:    time.Now,
+        cfg:           cfg,
+        users:         users,
+        refreshTokens: refreshTokens,
+        jwtKey:        []byte(cfg.JWTSecret),
+        now:           time.Now,
     }
 }
 
@@ -43,7 +55,20 @@ type Claims struct {
 }
 
 func (service *AuthService) IssueToken(user domain.User) (AuthResult, error) {
-    expires := service.now().Add(service.cfg.JWTExpiry)
+    expiry := service.cfg.JWTExpiryUser
+    refreshExpiry := service.cfg.JWTRefreshExpiryUser
+    if user.Role == domain.RoleAdmin {
+        expiry = service.cfg.JWTExpiryAdmin
+        refreshExpiry = service.cfg.JWTRefreshExpiryAdmin
+    }
+    if expiry <= 0 {
+        expiry = service.cfg.JWTExpiry
+    }
+    if refreshExpiry <= 0 {
+        refreshExpiry = service.cfg.JWTRefreshExpiry
+    }
+    expires := service.now().Add(expiry)
+    refreshExpires := service.now().Add(refreshExpiry)
     claims := Claims{
         UserID: user.ID,
         Role:   user.Role,
@@ -60,10 +85,27 @@ func (service *AuthService) IssueToken(user domain.User) (AuthResult, error) {
         return AuthResult{}, err
     }
 
+    refreshToken, err := generateRefreshToken()
+    if err != nil {
+        return AuthResult{}, err
+    }
+    tokenHash := hashToken(refreshToken)
+    if err := service.refreshTokens.Create(&domain.RefreshToken{
+        ID:        util.NewUUID(),
+        UserID:    user.ID,
+        TokenHash: tokenHash,
+        ExpiresAt: refreshExpires,
+        CreatedAt: service.now(),
+    }); err != nil {
+        return AuthResult{}, err
+    }
+
     return AuthResult{
-        Token:     signed,
-        ExpiresAt: expires,
-        User:      domain.ToUserDTO(user),
+        Token:            signed,
+        ExpiresAt:        expires,
+        RefreshToken:     refreshToken,
+        RefreshExpiresAt: refreshExpires,
+        User:             domain.ToUserDTO(user),
     }, nil
 }
 
@@ -119,6 +161,28 @@ func (service *AuthService) GuestLogin(name string, email string) (AuthResult, e
     return service.IssueToken(user)
 }
 
+func (service *AuthService) RefreshWithToken(refreshToken string) (AuthResult, error) {
+    token := strings.TrimSpace(refreshToken)
+    if token == "" {
+        return AuthResult{}, errors.New("refresh token wajib diisi")
+    }
+    tokenHash := hashToken(token)
+    stored, err := service.refreshTokens.FindByHash(tokenHash)
+    if err != nil {
+        return AuthResult{}, errors.New("refresh token tidak valid")
+    }
+    if service.now().After(stored.ExpiresAt) {
+        _ = service.refreshTokens.DeleteByID(stored.ID)
+        return AuthResult{}, errors.New("refresh token kadaluarsa")
+    }
+    user, err := service.users.FindByID(stored.UserID)
+    if err != nil {
+        return AuthResult{}, errors.New("user tidak ditemukan")
+    }
+    _ = service.refreshTokens.DeleteByID(stored.ID)
+    return service.IssueToken(*user)
+}
+
 func (service *AuthService) ParseToken(tokenString string) (*Claims, error) {
     token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
         return service.jwtKey, nil
@@ -130,4 +194,17 @@ func (service *AuthService) ParseToken(tokenString string) (*Claims, error) {
         return claims, nil
     }
     return nil, errors.New("token tidak valid")
+}
+
+func generateRefreshToken() (string, error) {
+    buffer := make([]byte, 32)
+    if _, err := rand.Read(buffer); err != nil {
+        return "", err
+    }
+    return base64.RawURLEncoding.EncodeToString(buffer), nil
+}
+
+func hashToken(token string) string {
+    sum := sha256.Sum256([]byte(token))
+    return hex.EncodeToString(sum[:])
 }
