@@ -26,6 +26,7 @@ func (handler *TicketHandler) RegisterRoutes(public *gin.RouterGroup, auth *gin.
     auth.GET("/tickets", handler.listTickets)
     public.GET("/tickets/search", handler.searchTickets)
     public.GET("/tickets/:id", handler.getTicket)
+    public.POST("/tickets/guest", handler.createGuestTicket)
     auth.POST("/tickets", handler.createTicket)
     auth.POST("/tickets/:id", handler.updateTicket)
     auth.POST("/tickets/:id/delete", handler.deleteTicket)
@@ -89,6 +90,20 @@ func (handler *TicketHandler) createTicket(c *gin.Context) {
         return
     }
     result, err := handler.tickets.CreateTicket(c, user, req)
+    if err != nil {
+        respondError(c, http.StatusBadRequest, err.Error())
+        return
+    }
+    respondCreated(c, result)
+}
+
+func (handler *TicketHandler) createGuestTicket(c *gin.Context) {
+    var req service.GuestTicketCreateRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        respondError(c, http.StatusBadRequest, "payload tidak valid")
+        return
+    }
+    result, err := handler.tickets.CreateGuestTicket(c, req)
     if err != nil {
         respondError(c, http.StatusBadRequest, err.Error())
         return
