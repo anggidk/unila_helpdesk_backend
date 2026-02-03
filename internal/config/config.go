@@ -24,7 +24,6 @@ type Config struct {
     DatabaseIdleConns int
     CORSOrigins       []string
     FCMEnabled        bool
-    FCMProjectID      string
     FCMCredentials    string
 }
 
@@ -52,7 +51,6 @@ func Load() Config {
         DatabaseIdleConns: envInt("DB_IDLE_CONNS", 5),
         CORSOrigins:       envCSV("CORS_ORIGINS", "*"),
         FCMEnabled:        envBool("FCM_ENABLED", false),
-        FCMProjectID:      envString("FCM_PROJECT_ID", ""),
         FCMCredentials:    envString("FCM_CREDENTIALS", ""),
     }
 }
