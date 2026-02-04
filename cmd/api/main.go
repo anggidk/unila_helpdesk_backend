@@ -79,9 +79,10 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	authHandler.RegisterRoutes(api)
-	categoryHandler.RegisterRoutes(public)
-	ticketHandler.RegisterRoutes(public, authGroup)
+    authHandler.RegisterRoutes(api)
+    categoryHandler.RegisterRoutes(public)
+    categoryHandler.RegisterAdminRoutes(adminGroup)
+    ticketHandler.RegisterRoutes(public, authGroup)
 	surveyHandler.RegisterRoutes(public, authGroup, adminGroup)
 	notificationHandler.RegisterRoutes(authGroup)
 	reportHandler.RegisterRoutes(adminGroup)
