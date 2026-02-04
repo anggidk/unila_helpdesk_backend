@@ -50,3 +50,9 @@ func (repo *CategoryRepository) Upsert(category domain.ServiceCategory) error {
     }
     return repo.db.Create(&category).Error
 }
+
+func (repo *CategoryRepository) UpdateTemplate(categoryID string, templateID string) error {
+    return repo.db.Model(&domain.ServiceCategory{}).
+        Where("id = ?", categoryID).
+        Update("survey_template_id", templateID).Error
+}
