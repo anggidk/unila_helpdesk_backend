@@ -354,7 +354,7 @@ func (service *TicketService) ListTicketsPaged(
     limit int,
 ) (domain.TicketPageDTO, error) {
     if limit <= 0 {
-        limit = 50
+        limit = 15
     }
     if limit > 50 {
         limit = 50

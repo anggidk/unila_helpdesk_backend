@@ -100,7 +100,7 @@ func (handler *TicketHandler) listTicketsPaged(c *gin.Context) {
             page = parsed
         }
     }
-    limit := 50
+    limit := 15
     if raw := c.Query("limit"); raw != "" {
         if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
             limit = parsed
