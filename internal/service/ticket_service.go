@@ -347,6 +347,47 @@ func (service *TicketService) ListTickets(user domain.User) ([]domain.TicketDTO,
     return service.mapTickets(tickets, scores), nil
 }
 
+func (service *TicketService) ListTicketsPaged(
+    user domain.User,
+    filter repository.TicketListFilter,
+    page int,
+    limit int,
+) (domain.TicketPageDTO, error) {
+    if limit <= 0 {
+        limit = 50
+    }
+    if limit > 50 {
+        limit = 50
+    }
+    if page < 1 {
+        page = 1
+    }
+
+    if user.Role != domain.RoleAdmin {
+        filter.ReporterID = user.ID
+    }
+
+    tickets, total, err := service.tickets.ListFiltered(filter, page, limit)
+    if err != nil {
+        return domain.TicketPageDTO{}, err
+    }
+    scores, err := service.tickets.GetSurveyScores(ticketIDs(tickets))
+    if err != nil {
+        return domain.TicketPageDTO{}, err
+    }
+    totalPages := 0
+    if limit > 0 {
+        totalPages = int((total + int64(limit) - 1) / int64(limit))
+    }
+    return domain.TicketPageDTO{
+        Items:      service.mapTickets(tickets, scores),
+        Page:       page,
+        Limit:      limit,
+        Total:      total,
+        TotalPages: totalPages,
+    }, nil
+}
+
 func (service *TicketService) SearchTickets(query string, guestOnly bool) ([]domain.TicketDTO, error) {
     tickets, err := service.tickets.Search(query, guestOnly)
     if err != nil {

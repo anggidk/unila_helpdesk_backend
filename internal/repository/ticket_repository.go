@@ -12,6 +12,16 @@ type TicketRepository struct {
     db *gorm.DB
 }
 
+type TicketListFilter struct {
+    Query      string
+    Status     *domain.TicketStatus
+    CategoryID string
+    Start      *time.Time
+    End        *time.Time
+    ReporterID string
+    IsGuest    *bool
+}
+
 func NewTicketRepository(db *gorm.DB) *TicketRepository {
     return &TicketRepository{db: db}
 }
@@ -70,6 +80,58 @@ func (repo *TicketRepository) Search(query string, isGuest bool) ([]domain.Ticke
         return nil, err
     }
     return tickets, nil
+}
+
+func (repo *TicketRepository) ListFiltered(
+    filter TicketListFilter,
+    page int,
+    limit int,
+) ([]domain.Ticket, int64, error) {
+    if page < 1 {
+        page = 1
+    }
+    if limit <= 0 {
+        limit = 20
+    }
+
+    qb := repo.db.Model(&domain.Ticket{})
+    if filter.Query != "" {
+        like := "%" + filter.Query + "%"
+        qb = qb.Where("id ILIKE ? OR title ILIKE ?", like, like)
+    }
+    if filter.Status != nil {
+        qb = qb.Where("status = ?", *filter.Status)
+    }
+    if filter.CategoryID != "" {
+        qb = qb.Where("category_id = ?", filter.CategoryID)
+    }
+    if filter.ReporterID != "" {
+        qb = qb.Where("reporter_id = ?", filter.ReporterID)
+    }
+    if filter.IsGuest != nil {
+        qb = qb.Where("is_guest = ?", *filter.IsGuest)
+    }
+    if filter.Start != nil {
+        qb = qb.Where("created_at >= ?", *filter.Start)
+    }
+    if filter.End != nil {
+        qb = qb.Where("created_at < ?", *filter.End)
+    }
+
+    var total int64
+    if err := qb.Count(&total).Error; err != nil {
+        return nil, 0, err
+    }
+
+    var tickets []domain.Ticket
+    if err := qb.Preload("Category").
+        Order("created_at desc").
+        Limit(limit).
+        Offset((page - 1) * limit).
+        Find(&tickets).Error; err != nil {
+        return nil, 0, err
+    }
+    return tickets, total, nil
 }
 
 func (repo *TicketRepository) CountForYear(year int) (int64, error) {

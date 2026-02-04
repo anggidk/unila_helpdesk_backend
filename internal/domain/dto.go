@@ -41,6 +41,14 @@ type TicketDTO struct {
     SurveyScore float64          `json:"surveyScore"`
 }
 
+type TicketPageDTO struct {
+    Items      []TicketDTO `json:"items"`
+    Page       int         `json:"page"`
+    Limit      int         `json:"limit"`
+    Total      int64       `json:"total"`
+    TotalPages int         `json:"totalPages"`
+}
+
 type ServiceCategoryDTO struct {
     ID           string `json:"id"`
     Name         string `json:"name"`

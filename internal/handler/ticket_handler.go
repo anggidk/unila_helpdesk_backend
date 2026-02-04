@@ -1,10 +1,14 @@
 package handler
 
 import (
+    "errors"
     "net/http"
+    "strconv"
+    "time"
 
     "unila_helpdesk_backend/internal/domain"
     "unila_helpdesk_backend/internal/middleware"
+    "unila_helpdesk_backend/internal/repository"
     "unila_helpdesk_backend/internal/service"
 
     "github.com/gin-gonic/gin"
@@ -24,6 +28,7 @@ func NewTicketHandler(tickets *service.TicketService) *TicketHandler {
 
 func (handler *TicketHandler) RegisterRoutes(public *gin.RouterGroup, auth *gin.RouterGroup) {
     auth.GET("/tickets", handler.listTickets)
+    auth.GET("/tickets/paged", handler.listTicketsPaged)
     public.GET("/tickets/search", handler.searchTickets)
     public.GET("/tickets/:id", handler.getTicket)
     public.POST("/tickets/guest", handler.createGuestTicket)
@@ -45,6 +50,92 @@ func (handler *TicketHandler) listTickets(c *gin.Context) {
         return
     }
     respondOK(c, result)
+}
+
+func (handler *TicketHandler) listTicketsPaged(c *gin.Context) {
+    user, ok := middleware.GetUser(c)
+    if !ok {
+        respondError(c, http.StatusUnauthorized, "token dibutuhkan")
+        return
+    }
+
+    query := c.Query("q")
+    categoryID := c.Query("categoryId")
+    statusRaw := c.Query("status")
+    startRaw := c.Query("start")
+    endRaw := c.Query("end")
+
+    var status *domain.TicketStatus
+    if statusRaw != "" {
+        parsed, err := parseTicketStatus(statusRaw)
+        if err != nil {
+            respondError(c, http.StatusBadRequest, err.Error())
+            return
+        }
+        status = &parsed
+    }
+
+    var start *time.Time
+    if startRaw != "" {
+        parsed, err := time.Parse(time.RFC3339, startRaw)
+        if err != nil {
+            respondError(c, http.StatusBadRequest, "start tidak valid")
+            return
+        }
+        start = &parsed
+    }
+    var end *time.Time
+    if endRaw != "" {
+        parsed, err := time.Parse(time.RFC3339, endRaw)
+        if err != nil {
+            respondError(c, http.StatusBadRequest, "end tidak valid")
+            return
+        }
+        end = &parsed
+    }
+
+    page := 1
+    if raw := c.Query("page"); raw != "" {
+        if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+            page = parsed
+        }
+    }
+    limit := 50
+    if raw := c.Query("limit"); raw != "" {
+        if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+            limit = parsed
+        }
+    }
+    if limit > 50 {
+        limit = 50
+    }
+
+    result, err := handler.tickets.ListTicketsPaged(user, repository.TicketListFilter{
+        Query:      query,
+        Status:     status,
+        CategoryID: categoryID,
+        Start:      start,
+        End:        end,
+    }, page, limit)
+    if err != nil {
+        respondError(c, http.StatusInternalServerError, err.Error())
+        return
+    }
+    respondOK(c, result)
+}
+
+func parseTicketStatus(raw string) (domain.TicketStatus, error) {
+    switch raw {
+    case string(domain.StatusWaiting):
+        return domain.StatusWaiting, nil
+    case string(domain.StatusProcessing):
+        return domain.StatusProcessing, nil
+    case string(domain.StatusInProgress):
+        return domain.StatusInProgress, nil
+    case string(domain.StatusResolved):
+        return domain.StatusResolved, nil
+    }
+    return "", errors.New("status tiket tidak valid")
 }
 
 func (handler *TicketHandler) searchTickets(c *gin.Context) {
