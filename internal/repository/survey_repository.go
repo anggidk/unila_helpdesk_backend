@@ -23,9 +23,16 @@ func (repo *SurveyRepository) ListTemplates() ([]domain.SurveyTemplate, error) {
 }
 
 func (repo *SurveyRepository) FindByCategory(categoryID string) (*domain.SurveyTemplate, error) {
+    var category domain.ServiceCategory
+    if err := repo.db.First(&category, "id = ?", categoryID).Error; err != nil {
+        return nil, err
+    }
+    if category.SurveyTemplateID == "" {
+        return nil, gorm.ErrRecordNotFound
+    }
     var template domain.SurveyTemplate
-    if err := repo.db.Preload("Questions").Order("updated_at desc, created_at desc").
-        First(&template, "category_id = ?", categoryID).Error; err != nil {
+    if err := repo.db.Preload("Questions").
+        First(&template, "id = ?", category.SurveyTemplateID).Error; err != nil {
         return nil, err
     }
     return &template, nil
