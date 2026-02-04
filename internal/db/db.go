@@ -114,7 +114,7 @@ func AutoMigrate(database *gorm.DB) error {
             END IF;
         END $$;
     `).Error
-    return database.AutoMigrate(
+    if err := database.AutoMigrate(
         &domain.User{},
         &domain.ServiceCategory{},
         &domain.Ticket{},
@@ -126,7 +126,25 @@ func AutoMigrate(database *gorm.DB) error {
         &domain.Notification{},
         &domain.FCMToken{},
         &domain.RefreshToken{},
-    )
+    ); err != nil {
+        return err
+    }
+
+    // Backfill template_id for legacy survey responses (before template_id existed).
+    if err := database.Exec(`
+        UPDATE survey_responses sr
+        SET template_id = sc.survey_template_id
+        FROM tickets t
+        JOIN service_categories sc ON sc.id = t.category_id
+        WHERE sr.ticket_id = t.id
+          AND (sr.template_id IS NULL OR sr.template_id = '')
+          AND sc.survey_template_id IS NOT NULL
+          AND sc.survey_template_id <> ''
+    `).Error; err != nil {
+        return err
+    }
+
+    return nil
 }
 
 func MustAutoMigrate(database *gorm.DB) {
