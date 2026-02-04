@@ -207,6 +207,55 @@ func (service *SurveyService) SubmitSurvey(user domain.User, req SurveyResponseR
     return nil
 }
 
+func (service *SurveyService) ListResponsesPaged(
+    filter repository.SurveyResponseFilter,
+    page int,
+    limit int,
+) (domain.SurveyResponsePageDTO, error) {
+    if limit <= 0 {
+        limit = 50
+    }
+    if limit > 50 {
+        limit = 50
+    }
+    if page < 1 {
+        page = 1
+    }
+
+    rows, total, err := service.surveys.ListResponses(filter, page, limit)
+    if err != nil {
+        return domain.SurveyResponsePageDTO{}, err
+    }
+    items := make([]domain.SurveyResponseItemDTO, 0, len(rows))
+    for _, row := range rows {
+        items = append(items, domain.SurveyResponseItemDTO{
+            ID:         row.ID,
+            TicketID:   row.TicketID,
+            UserID:     row.UserID,
+            UserName:   row.UserName,
+            UserEmail:  row.UserEmail,
+            UserEntity: row.UserEntity,
+            CategoryID: row.CategoryID,
+            Category:   row.CategoryName,
+            TemplateID: row.TemplateID,
+            Template:   row.TemplateTitle,
+            Score:      row.Score,
+            CreatedAt:  row.CreatedAt,
+        })
+    }
+    totalPages := 0
+    if limit > 0 {
+        totalPages = int((total + int64(limit) - 1) / int64(limit))
+    }
+    return domain.SurveyResponsePageDTO{
+        Items:      items,
+        Page:       page,
+        Limit:      limit,
+        Total:      total,
+        TotalPages: totalPages,
+    }, nil
+}
+
 func mapSurveyTemplates(templates []domain.SurveyTemplate) []domain.SurveyTemplateDTO {
     result := make([]domain.SurveyTemplateDTO, 0, len(templates))
     for _, template := range templates {

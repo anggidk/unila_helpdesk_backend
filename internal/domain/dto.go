@@ -135,6 +135,29 @@ type SurveySatisfactionDTO struct {
     Rows       []SurveySatisfactionRowDTO `json:"rows"`
 }
 
+type SurveyResponseItemDTO struct {
+    ID          string    `json:"id"`
+    TicketID    string    `json:"ticketId"`
+    UserID      string    `json:"userId"`
+    UserName    string    `json:"userName"`
+    UserEmail   string    `json:"userEmail"`
+    UserEntity  string    `json:"userEntity"`
+    CategoryID  string    `json:"categoryId"`
+    Category    string    `json:"category"`
+    TemplateID  string    `json:"templateId"`
+    Template    string    `json:"template"`
+    Score       float64   `json:"score"`
+    CreatedAt   time.Time `json:"createdAt"`
+}
+
+type SurveyResponsePageDTO struct {
+    Items      []SurveyResponseItemDTO `json:"items"`
+    Page       int                     `json:"page"`
+    Limit      int                     `json:"limit"`
+    Total      int64                   `json:"total"`
+    TotalPages int                     `json:"totalPages"`
+}
+
 type ServiceUtilizationDTO struct {
     CategoryID       string `json:"categoryId"`
     Category         string `json:"category"`

@@ -1,6 +1,8 @@
 package repository
 
 import (
+    "time"
+
     "unila_helpdesk_backend/internal/domain"
 
     "gorm.io/gorm"
@@ -8,6 +10,29 @@ import (
 
 type SurveyRepository struct {
     db *gorm.DB
+}
+
+type SurveyResponseFilter struct {
+    Query      string
+    CategoryID string
+    TemplateID string
+    Start      *time.Time
+    End        *time.Time
+}
+
+type SurveyResponseRow struct {
+    ID            string
+    TicketID      string
+    UserID        string
+    TemplateID    string
+    Score         float64
+    CreatedAt     time.Time
+    UserName      string
+    UserEmail     string
+    UserEntity    string
+    CategoryID    string
+    CategoryName  string
+    TemplateTitle string
 }
 
 func NewSurveyRepository(db *gorm.DB) *SurveyRepository {
@@ -107,4 +132,68 @@ func (repo *SurveyRepository) HasResponse(ticketID string, userID string) (bool,
         return false, err
     }
     return count > 0, nil
+}
+
+func (repo *SurveyRepository) ListResponses(
+    filter SurveyResponseFilter,
+    page int,
+    limit int,
+) ([]SurveyResponseRow, int64, error) {
+    if page < 1 {
+        page = 1
+    }
+    if limit <= 0 {
+        limit = 20
+    }
+
+    base := repo.db.Table("survey_responses sr").
+        Joins("JOIN users u ON u.id = sr.user_id").
+        Joins("JOIN tickets t ON t.id = sr.ticket_id").
+        Joins("LEFT JOIN service_categories sc ON sc.id = t.category_id").
+        Joins("LEFT JOIN survey_templates st ON st.id = sr.template_id")
+
+    if filter.Query != "" {
+        like := "%" + filter.Query + "%"
+        base = base.Where("sr.ticket_id ILIKE ? OR u.name ILIKE ? OR u.email ILIKE ?", like, like, like)
+    }
+    if filter.CategoryID != "" {
+        base = base.Where("t.category_id = ?", filter.CategoryID)
+    }
+    if filter.TemplateID != "" {
+        base = base.Where("sr.template_id = ?", filter.TemplateID)
+    }
+    if filter.Start != nil {
+        base = base.Where("sr.created_at >= ?", *filter.Start)
+    }
+    if filter.End != nil {
+        base = base.Where("sr.created_at < ?", *filter.End)
+    }
+
+    var total int64
+    if err := base.Count(&total).Error; err != nil {
+        return nil, 0, err
+    }
+
+    var rows []SurveyResponseRow
+    if err := base.Select(`
+            sr.id,
+            sr.ticket_id,
+            sr.user_id,
+            sr.template_id,
+            sr.score,
+            sr.created_at,
+            u.name as user_name,
+            u.email as user_email,
+            u.entity as user_entity,
+            t.category_id as category_id,
+            sc.name as category_name,
+            st.title as template_title
+        `).
+        Order("sr.created_at desc").
+        Limit(limit).
+        Offset((page - 1) * limit).
+        Scan(&rows).Error; err != nil {
+        return nil, 0, err
+    }
+    return rows, total, nil
 }
