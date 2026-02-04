@@ -2,6 +2,8 @@ package service
 
 import (
     "encoding/json"
+    "errors"
+    "sort"
     "strconv"
     "strings"
     "time"
@@ -233,6 +235,7 @@ func scoreFromValue(value interface{}) (float64, bool) {
     return 0, false
 }
 
+
 func (service *ReportService) ServiceTrends(start time.Time, end time.Time) ([]domain.ServiceTrendDTO, error) {
     type row struct {
         CategoryID string
@@ -391,28 +394,32 @@ func (service *ReportService) SurveySatisfaction(
         if err := service.db.Preload("Questions").First(&template, "id = ?", templateID).Error; err != nil {
             return nil, err
         }
-        if categoryID != "" && template.CategoryID != categoryID {
-            return nil, gorm.ErrRecordNotFound
-        }
     } else {
-        if err := service.db.Preload("Questions").Order("updated_at desc, created_at desc").
-            First(&template, "category_id = ?", categoryID).Error; err != nil {
+        var category domain.ServiceCategory
+        if err := service.db.First(&category, "id = ?", categoryID).Error; err != nil {
             return nil, err
         }
-    }
-
-    if categoryID == "" {
-        categoryID = template.CategoryID
+        if category.SurveyTemplateID == "" {
+            return nil, gorm.ErrRecordNotFound
+        }
+        if err := service.db.Preload("Questions").First(&template, "id = ?", category.SurveyTemplateID).Error; err != nil {
+            return nil, err
+        }
     }
 
     start, end := periodRange(period, periods, service.now)
 
     var responses []domain.SurveyResponse
-    if err := service.db.Model(&domain.SurveyResponse{}).
+    query := service.db.Model(&domain.SurveyResponse{}).
         Joins("JOIN tickets t ON t.id = survey_responses.ticket_id").
-        Where("t.category_id = ?", categoryID).
-        Where("survey_responses.created_at >= ? AND survey_responses.created_at < ?", start, end).
-        Find(&responses).Error; err != nil {
+        Where("survey_responses.created_at >= ? AND survey_responses.created_at < ?", start, end)
+    if categoryID != "" {
+        query = query.Where("t.category_id = ?", categoryID)
+    }
+    if template.ID != "" {
+        query = query.Where("survey_responses.template_id = ?", template.ID)
+    }
+    if err := query.Find(&responses).Error; err != nil {
         return nil, err
     }
 
@@ -430,7 +437,7 @@ func (service *ReportService) SurveySatisfaction(
                 continue
             }
             answerCounts[question.ID]++
-            if score, ok := scoreFromValue(value); ok {
+            if score, ok := scoreFromQuestionValue(value, question.Type); ok {
                 sums[question.ID] += score
                 scoreCounts[question.ID]++
             }
@@ -454,10 +461,14 @@ func (service *ReportService) SurveySatisfaction(
     }
 
     categoryName := categoryID
-    var category domain.ServiceCategory
-    if err := service.db.First(&category, "id = ?", categoryID).Error; err == nil {
-        if category.Name != "" {
-            categoryName = category.Name
+    if categoryID == "" {
+        categoryName = "Semua Kategori"
+    } else {
+        var category domain.ServiceCategory
+        if err := service.db.First(&category, "id = ?", categoryID).Error; err == nil {
+            if category.Name != "" {
+                categoryName = category.Name
+            }
         }
     }
 
@@ -472,6 +483,64 @@ func (service *ReportService) SurveySatisfaction(
         Rows:       rows,
     }
     return report, nil
+}
+
+func (service *ReportService) TemplatesByCategory(categoryID string) ([]domain.SurveyTemplateDTO, error) {
+    if strings.TrimSpace(categoryID) == "" {
+        return nil, errors.New("categoryId wajib diisi")
+    }
+
+    var category domain.ServiceCategory
+    if err := service.db.First(&category, "id = ?", categoryID).Error; err != nil {
+        return nil, err
+    }
+
+    templateIDs := map[string]struct{}{}
+    if category.SurveyTemplateID != "" {
+        templateIDs[category.SurveyTemplateID] = struct{}{}
+    }
+
+    var usedIDs []string
+    if err := service.db.Model(&domain.SurveyResponse{}).
+        Joins("JOIN tickets t ON t.id = survey_responses.ticket_id").
+        Where("t.category_id = ? AND survey_responses.template_id <> ''", categoryID).
+        Distinct().
+        Pluck("survey_responses.template_id", &usedIDs).Error; err != nil {
+        return nil, err
+    }
+    for _, id := range usedIDs {
+        if id != "" {
+            templateIDs[id] = struct{}{}
+        }
+    }
+
+    if len(templateIDs) == 0 {
+        return []domain.SurveyTemplateDTO{}, nil
+    }
+
+    ids := make([]string, 0, len(templateIDs))
+    for id := range templateIDs {
+        ids = append(ids, id)
+    }
+
+    var templates []domain.SurveyTemplate
+    if err := service.db.Preload("Questions").
+        Where("id IN ?", ids).
+        Find(&templates).Error; err != nil {
+        return nil, err
+    }
+
+    sort.Slice(templates, func(i, j int) bool {
+        if templates[i].ID == category.SurveyTemplateID {
+            return true
+        }
+        if templates[j].ID == category.SurveyTemplateID {
+            return false
+        }
+        return templates[i].UpdatedAt.After(templates[j].UpdatedAt)
+    })
+
+    return mapSurveyTemplateDTOs(templates), nil
 }
 
 func (service *ReportService) UsageCohort(period string, periods int) ([]domain.UsageCohortRowDTO, error) {
@@ -693,4 +762,35 @@ func periodRange(period string, periods int, nowFn func() time.Time) (time.Time,
     end := addPeriods(periodStart(now, unit), unit, 1)
     start := addPeriods(periodStart(now, unit), unit, -(periods - 1))
     return start, end
+}
+
+func mapSurveyTemplateDTOs(templates []domain.SurveyTemplate) []domain.SurveyTemplateDTO {
+    result := make([]domain.SurveyTemplateDTO, 0, len(templates))
+    for _, template := range templates {
+        result = append(result, mapSurveyTemplateDTO(template))
+    }
+    return result
+}
+
+func mapSurveyTemplateDTO(template domain.SurveyTemplate) domain.SurveyTemplateDTO {
+    questions := make([]domain.SurveyQuestionDTO, 0, len(template.Questions))
+    for _, question := range template.Questions {
+        var options []string
+        _ = json.Unmarshal(question.Options, &options)
+        questions = append(questions, domain.SurveyQuestionDTO{
+            ID:      question.ID,
+            Text:    question.Text,
+            Type:    string(question.Type),
+            Options: options,
+        })
+    }
+    return domain.SurveyTemplateDTO{
+        ID:          template.ID,
+        Title:       template.Title,
+        Description: template.Description,
+        CategoryID:  template.CategoryID,
+        Questions:   questions,
+        CreatedAt:   template.CreatedAt,
+        UpdatedAt:   template.UpdatedAt,
+    }
 }
