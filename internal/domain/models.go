@@ -36,6 +36,10 @@ const (
 
 const (
     QuestionLikert         SurveyQuestionType = "likert"
+    QuestionLikert3        SurveyQuestionType = "likert3"
+    QuestionLikert7        SurveyQuestionType = "likert7"
+    QuestionLikert6        SurveyQuestionType = "likert6"
+    QuestionLikert4        SurveyQuestionType = "likert4"
     QuestionYesNo          SurveyQuestionType = "yesNo"
     QuestionMultipleChoice SurveyQuestionType = "multipleChoice"
     QuestionText           SurveyQuestionType = "text"
@@ -59,6 +63,7 @@ type ServiceCategory struct {
     ID           string `gorm:"primaryKey;size:60"`
     Name         string `gorm:"size:120"`
     GuestAllowed bool
+    SurveyTemplateID string `gorm:"size:64"`
     CreatedAt    time.Time
     UpdatedAt    time.Time
 }
@@ -126,6 +131,7 @@ type SurveyResponse struct {
     ID        string         `gorm:"primaryKey;type:varchar(36)"`
     TicketID  string         `gorm:"size:64;index"`
     UserID    string         `gorm:"size:36;index"`
+    TemplateID string        `gorm:"size:64;index"`
     Answers   datatypes.JSON `gorm:"type:jsonb"`
     Score     float64        `gorm:"default:0"`
     CreatedAt time.Time
