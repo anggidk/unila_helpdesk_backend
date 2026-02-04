@@ -45,6 +45,7 @@ type ServiceCategoryDTO struct {
     ID           string `json:"id"`
     Name         string `json:"name"`
     GuestAllowed bool   `json:"guestAllowed"`
+    TemplateID   string `json:"templateId,omitempty"`
 }
 
 type SurveyQuestionDTO struct {
@@ -60,6 +61,8 @@ type SurveyTemplateDTO struct {
     Description string              `json:"description"`
     CategoryID  string              `json:"categoryId"`
     Questions   []SurveyQuestionDTO `json:"questions"`
+    CreatedAt   time.Time           `json:"createdAt"`
+    UpdatedAt   time.Time           `json:"updatedAt"`
 }
 
 type NotificationDTO struct {
