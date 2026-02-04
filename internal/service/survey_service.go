@@ -182,12 +182,19 @@ func (service *SurveyService) SubmitSurvey(user domain.User, req SurveyResponseR
         return err
     }
 
+    template, _ := service.surveys.FindByCategory(ticket.CategoryID)
+    templateID := ""
+    if template != nil {
+        templateID = template.ID
+    }
+
     response := domain.SurveyResponse{
         ID:        util.NewUUID(),
         TicketID:  ticket.ID,
         UserID:    user.ID,
+        TemplateID: templateID,
         Answers:   payload,
-        Score:     calculateSurveyScore(req.Answers),
+        Score:     calculateSurveyScore(req.Answers, template),
         CreatedAt: service.now(),
     }
     if err := service.surveys.SaveResponse(&response); err != nil {
@@ -226,10 +233,37 @@ func mapSurveyTemplate(template domain.SurveyTemplate) domain.SurveyTemplateDTO 
         Description: template.Description,
         CategoryID:  template.CategoryID,
         Questions:   questions,
+        CreatedAt:   template.CreatedAt,
+        UpdatedAt:   template.UpdatedAt,
     }
 }
 
-func calculateSurveyScore(answers map[string]interface{}) float64 {
+func calculateSurveyScore(answers map[string]interface{}, template *domain.SurveyTemplate) float64 {
+    if len(answers) == 0 {
+        return 0
+    }
+    if template == nil || len(template.Questions) == 0 {
+        return calculateLegacyScore(answers)
+    }
+    var total float64
+    var count int
+    for _, question := range template.Questions {
+        value, ok := answers[question.ID]
+        if !ok {
+            continue
+        }
+        if score, ok := scoreFromQuestionValue(value, question.Type); ok {
+            total += score
+            count++
+        }
+    }
+    if count == 0 {
+        return 0
+    }
+    return total / float64(count)
+}
+
+func calculateLegacyScore(answers map[string]interface{}) float64 {
     if len(answers) == 0 {
         return 0
     }
