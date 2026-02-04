@@ -29,6 +29,10 @@ func (handler *CategoryHandler) RegisterRoutes(public *gin.RouterGroup) {
     public.GET("/categories/guest", handler.listGuest)
 }
 
+func (handler *CategoryHandler) RegisterAdminRoutes(admin *gin.RouterGroup) {
+    admin.PUT("/categories/:id/template", handler.assignTemplate)
+}
+
 func (handler *CategoryHandler) listAll(c *gin.Context) {
     items, err := handler.categories.List()
     if err != nil {
@@ -75,7 +79,30 @@ func toCategoryDTOs(items []domain.ServiceCategory) []domain.ServiceCategoryDTO 
             ID:           item.ID,
             Name:         item.Name,
             GuestAllowed: item.GuestAllowed,
+            TemplateID:   item.SurveyTemplateID,
         })
     }
     return result
+}
+
+type assignTemplateRequest struct {
+    TemplateID string `json:"templateId"`
+}
+
+func (handler *CategoryHandler) assignTemplate(c *gin.Context) {
+    categoryID := c.Param("id")
+    var req assignTemplateRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        respondError(c, http.StatusBadRequest, "payload tidak valid")
+        return
+    }
+    if categoryID == "" {
+        respondError(c, http.StatusBadRequest, "kategori tidak ditemukan")
+        return
+    }
+    if err := handler.categories.UpdateTemplate(categoryID, req.TemplateID); err != nil {
+        respondError(c, http.StatusInternalServerError, err.Error())
+        return
+    }
+    respondOK(c, gin.H{"categoryId": categoryID, "templateId": req.TemplateID})
 }
