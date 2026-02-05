@@ -22,12 +22,11 @@ func (handler *ReportHandler) RegisterRoutes(admin *gin.RouterGroup) {
     admin.GET("/reports/summary", handler.dashboardSummary)
     admin.GET("/reports", handler.serviceTrends)
     admin.GET("/reports/satisfaction-summary", handler.satisfactionSummary)
-    admin.GET("/reports/cohort", handler.cohortReport)
-    admin.GET("/reports/satisfaction", handler.surveySatisfaction)
-    admin.GET("/reports/templates", handler.templatesByCategory)
-    admin.GET("/reports/usage", handler.usageCohort)
-    admin.GET("/reports/service-utilization", handler.serviceUtilization)
-    admin.GET("/reports/entity-service", handler.entityService)
+	admin.GET("/reports/cohort", handler.cohortReport)
+	admin.GET("/reports/satisfaction", handler.surveySatisfaction)
+	admin.GET("/reports/templates", handler.templatesByCategory)
+	admin.GET("/reports/usage", handler.usageCohort)
+	admin.GET("/reports/entity-service", handler.entityService)
 }
 
 func (handler *ReportHandler) dashboardSummary(c *gin.Context) {
@@ -145,26 +144,6 @@ func (handler *ReportHandler) usageCohort(c *gin.Context) {
     }
     period := c.DefaultQuery("period", "monthly")
     rows, err := handler.reports.UsageCohort(period, periods)
-    if err != nil {
-        respondError(c, http.StatusInternalServerError, err.Error())
-        return
-    }
-    respondOK(c, rows)
-}
-
-func (handler *ReportHandler) serviceUtilization(c *gin.Context) {
-    periods := 5
-    if raw := c.Query("periods"); raw != "" {
-        if parsed, err := strconv.Atoi(raw); err == nil {
-            periods = parsed
-        }
-    } else if raw := c.Query("months"); raw != "" {
-        if parsed, err := strconv.Atoi(raw); err == nil {
-            periods = parsed
-        }
-    }
-    period := c.DefaultQuery("period", "monthly")
-    rows, err := handler.reports.ServiceUtilizationCohort(period, periods)
     if err != nil {
         respondError(c, http.StatusInternalServerError, err.Error())
         return

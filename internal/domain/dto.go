@@ -158,13 +158,6 @@ type SurveyResponsePageDTO struct {
     TotalPages int                     `json:"totalPages"`
 }
 
-type ServiceUtilizationDTO struct {
-    CategoryID       string `json:"categoryId"`
-    Category         string `json:"category"`
-    FirstTicketUsers int    `json:"firstTicketUsers"`
-    FirstSurveyUsers int    `json:"firstSurveyUsers"`
-}
-
 type EntityServiceDTO struct {
     Entity     string `json:"entity"`
     CategoryID string `json:"categoryId"`

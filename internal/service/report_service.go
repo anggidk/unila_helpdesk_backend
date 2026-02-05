@@ -580,77 +580,6 @@ func (service *ReportService) UsageCohort(period string, periods int) ([]domain.
     return rows, nil
 }
 
-func (service *ReportService) ServiceUtilizationCohort(period string, periods int) ([]domain.ServiceUtilizationDTO, error) {
-    type countRow struct {
-        CategoryID string
-        Total      int
-    }
-
-    ticketCounts := make(map[string]int)
-    surveyCounts := make(map[string]int)
-
-    start, end := periodRange(period, periods, service.now)
-
-    var ticketRows []countRow
-    if err := service.db.Raw(`
-        WITH ranked AS (
-            SELECT t.reporter_id, t.category_id,
-                   ROW_NUMBER() OVER (PARTITION BY t.reporter_id ORDER BY t.created_at ASC) AS rn
-            FROM tickets t
-            JOIN users u ON u.id = t.reporter_id
-            WHERE u.role = 'registered'
-              AND t.created_at >= ? AND t.created_at < ?
-        )
-        SELECT category_id, COUNT(*) AS total
-        FROM ranked
-        WHERE rn = 1
-        GROUP BY category_id
-    `, start, end).Scan(&ticketRows).Error; err != nil {
-        return nil, err
-    }
-    for _, row := range ticketRows {
-        ticketCounts[row.CategoryID] = row.Total
-    }
-
-    var surveyRows []countRow
-    if err := service.db.Raw(`
-        WITH ranked AS (
-            SELECT sr.user_id, t.category_id,
-                   ROW_NUMBER() OVER (PARTITION BY sr.user_id ORDER BY sr.created_at ASC) AS rn
-            FROM survey_responses sr
-            JOIN tickets t ON t.id = sr.ticket_id
-            JOIN users u ON u.id = sr.user_id
-            WHERE u.role = 'registered'
-              AND sr.created_at >= ? AND sr.created_at < ?
-        )
-        SELECT category_id, COUNT(*) AS total
-        FROM ranked
-        WHERE rn = 1
-        GROUP BY category_id
-    `, start, end).Scan(&surveyRows).Error; err != nil {
-        return nil, err
-    }
-    for _, row := range surveyRows {
-        surveyCounts[row.CategoryID] = row.Total
-    }
-
-    categories, err := service.listRegisteredCategories()
-    if err != nil {
-        return nil, err
-    }
-
-    rows := make([]domain.ServiceUtilizationDTO, 0, len(categories))
-    for _, cat := range categories {
-        rows = append(rows, domain.ServiceUtilizationDTO{
-            CategoryID:       cat.ID,
-            Category:         cat.Name,
-            FirstTicketUsers: ticketCounts[cat.ID],
-            FirstSurveyUsers: surveyCounts[cat.ID],
-        })
-    }
-    return rows, nil
-}
-
 func (service *ReportService) EntityServiceMatrix(period string, periods int) ([]domain.EntityServiceDTO, error) {
     type row struct {
         Entity     string
@@ -700,18 +629,30 @@ func (service *ReportService) EntityServiceMatrix(period string, periods int) ([
         surveyCounts[item.Entity][item.CategoryID] = item.Total
     }
 
-    categories, err := service.listRegisteredCategories()
-    if err != nil {
-        return nil, err
-    }
+	categories, err := service.listRegisteredCategories()
+	if err != nil {
+		return nil, err
+	}
 
-    entities := make(map[string]struct{})
-    for entity := range ticketCounts {
-        entities[entity] = struct{}{}
-    }
-    for entity := range surveyCounts {
-        entities[entity] = struct{}{}
-    }
+	entities := make(map[string]struct{})
+	for entity := range ticketCounts {
+		entities[entity] = struct{}{}
+	}
+	for entity := range surveyCounts {
+		entities[entity] = struct{}{}
+	}
+	var entityRows []string
+	if err := service.db.Model(&domain.User{}).
+		Distinct("entity").
+		Where("role = ?", domain.RoleRegistered).
+		Where("entity <> ''").
+		Order("entity asc").
+		Pluck("entity", &entityRows).Error; err != nil {
+		return nil, err
+	}
+	for _, entity := range entityRows {
+		entities[entity] = struct{}{}
+	}
 
     rows := make([]domain.EntityServiceDTO, 0)
     for entity := range entities {
