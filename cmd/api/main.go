@@ -66,7 +66,11 @@ func main() {
 	reportHandler := handler.NewReportHandler(reportService)
 
 	router := gin.Default()
-	router.Use(middleware.CORSMiddleware(cfg.CORSOrigins))
+	corsOrigins := strings.Split(cfg.CORSOrigins, ",")
+	for i, origin := range corsOrigins {
+		corsOrigins[i] = strings.TrimSpace(origin)
+	}
+	router.Use(middleware.CORSMiddleware(corsOrigins))
 
 	authRequired := middleware.AuthMiddleware(authService, userRepo, true)
 	authOptional := middleware.AuthMiddleware(authService, userRepo, false)
@@ -79,10 +83,10 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-    authHandler.RegisterRoutes(api)
-    categoryHandler.RegisterRoutes(public)
-    categoryHandler.RegisterAdminRoutes(adminGroup)
-    ticketHandler.RegisterRoutes(public, authGroup)
+	authHandler.RegisterRoutes(api)
+	categoryHandler.RegisterRoutes(public)
+	categoryHandler.RegisterAdminRoutes(adminGroup)
+	ticketHandler.RegisterRoutes(public, authGroup)
 	surveyHandler.RegisterRoutes(public, authGroup, adminGroup)
 	notificationHandler.RegisterRoutes(authGroup)
 	reportHandler.RegisterRoutes(adminGroup)
@@ -94,13 +98,47 @@ func main() {
 }
 
 func validateConfig(cfg config.Config) {
-	if strings.TrimSpace(cfg.JWTSecret) == "" || cfg.JWTSecret == "change-me" {
-		log.Fatal("JWT_SECRET wajib di-set dan tidak boleh menggunakan default")
+	// Validate required fields
+	if strings.TrimSpace(cfg.AppName) == "" {
+		log.Fatal("APP_NAME is required")
 	}
+	if strings.TrimSpace(cfg.Environment) == "" {
+		log.Fatal("APP_ENV is required")
+	}
+	if strings.TrimSpace(cfg.HTTPPort) == "" {
+		log.Fatal("HTTP_PORT is required")
+	}
+	if strings.TrimSpace(cfg.BaseURL) == "" {
+		log.Fatal("BASE_URL is required")
+	}
+	if strings.TrimSpace(cfg.JWTSecret) == "" {
+		log.Fatal("JWT_SECRET is required")
+	}
+	if cfg.JWTExpiry == 0 {
+		log.Fatal("JWT_EXPIRY is required")
+	}
+	if cfg.JWTRefreshExpiry == 0 {
+		log.Fatal("JWT_REFRESH_EXPIRY is required")
+	}
+	if strings.TrimSpace(cfg.DatabaseURL) == "" {
+		log.Fatal("DATABASE_URL is required")
+	}
+	if cfg.DatabaseMaxConns == 0 {
+		log.Fatal("DB_MAX_CONNS is required and must be > 0")
+	}
+	if cfg.DatabaseIdleConns == 0 {
+		log.Fatal("DB_IDLE_CONNS is required and must be > 0")
+	}
+	if strings.TrimSpace(cfg.CORSOrigins) == "" {
+		log.Fatal("CORS_ORIGINS is required")
+	}
+
+	// Production-specific validation
 	if strings.EqualFold(cfg.Environment, "production") {
-		for _, origin := range cfg.CORSOrigins {
-			if origin == "*" {
-				log.Fatal("CORS_ORIGINS tidak boleh menggunakan '*' di production")
+		corsOrigins := strings.Split(cfg.CORSOrigins, ",")
+		for _, origin := range corsOrigins {
+			if strings.TrimSpace(origin) == "*" {
+				log.Fatal("CORS_ORIGINS cannot use '*' in production")
 			}
 		}
 	}
