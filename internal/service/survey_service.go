@@ -21,6 +21,7 @@ type SurveyService struct {
 type SurveyTemplateRequest struct {
     Title       string                 `json:"title"`
     Description string                 `json:"description"`
+    Framework   string                 `json:"framework"`
     CategoryID  string                 `json:"categoryId"`
     Questions   []SurveyQuestionRequest `json:"questions"`
 }
@@ -72,6 +73,7 @@ func (service *SurveyService) CreateTemplate(req SurveyTemplateRequest) (domain.
         ID:          util.NewUUID(),
         Title:       strings.TrimSpace(req.Title),
         Description: strings.TrimSpace(req.Description),
+        Framework:   strings.TrimSpace(req.Framework),
         CategoryID:  req.CategoryID,
         CreatedAt:   service.now(),
         UpdatedAt:   service.now(),
@@ -118,6 +120,7 @@ func (service *SurveyService) UpdateTemplate(templateID string, req SurveyTempla
 
     template.Title = strings.TrimSpace(req.Title)
     template.Description = strings.TrimSpace(req.Description)
+    template.Framework = strings.TrimSpace(req.Framework)
     template.CategoryID = req.CategoryID
     template.UpdatedAt = service.now()
 
@@ -280,6 +283,7 @@ func mapSurveyTemplate(template domain.SurveyTemplate) domain.SurveyTemplateDTO 
         ID:          template.ID,
         Title:       template.Title,
         Description: template.Description,
+        Framework:   template.Framework,
         CategoryID:  template.CategoryID,
         Questions:   questions,
         CreatedAt:   template.CreatedAt,
@@ -320,41 +324,41 @@ func calculateLegacyScore(answers map[string]interface{}) float64 {
     var count int
     for _, value := range answers {
         switch v := value.(type) {
-        case float64:
-            if v >= 1 && v <= 5 {
-                total += v
-                count++
-            }
-        case int:
-            if v >= 1 && v <= 5 {
-                total += float64(v)
-                count++
-            }
-        case bool:
-            if v {
-                total += 5
-            } else {
-                total += 1
-            }
-            count++
+		case float64:
+			if v >= 1 && v <= 5 {
+				total += normalizeToHundred(v, 5)
+				count++
+			}
+		case int:
+			if v >= 1 && v <= 5 {
+				total += normalizeToHundred(float64(v), 5)
+				count++
+			}
+		case bool:
+			if v {
+				total += 100
+			} else {
+				total += 0
+			}
+			count++
         case string:
             cleaned := strings.ToLower(strings.TrimSpace(v))
-            if cleaned == "ya" || cleaned == "yes" || cleaned == "true" {
-                total += 5
-                count++
-                continue
-            }
-            if cleaned == "tidak" || cleaned == "no" || cleaned == "false" {
-                total += 1
-                count++
-                continue
-            }
-            if parsed, err := strconv.ParseFloat(cleaned, 64); err == nil {
-                if parsed >= 1 && parsed <= 5 {
-                    total += parsed
-                    count++
-                }
-            }
+			if cleaned == "ya" || cleaned == "yes" || cleaned == "true" {
+				total += 100
+				count++
+				continue
+			}
+			if cleaned == "tidak" || cleaned == "no" || cleaned == "false" {
+				total += 0
+				count++
+				continue
+			}
+			if parsed, err := strconv.ParseFloat(cleaned, 64); err == nil {
+				if parsed >= 1 && parsed <= 5 {
+					total += normalizeToHundred(parsed, 5)
+					count++
+				}
+			}
         }
     }
     if count == 0 {

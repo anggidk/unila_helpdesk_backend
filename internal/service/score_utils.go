@@ -23,36 +23,28 @@ func scoreFromQuestionValue(value interface{}, questionType domain.SurveyQuestio
         return scoreFromScale(value, 4)
     case domain.QuestionLikert4:
         return scoreFromScale(value, 4)
-    case domain.QuestionLikert6Puas:
-        return scoreFromScale(value, 6)
-    case domain.QuestionLikert6:
-        return scoreFromScale(value, 6)
-    case domain.QuestionLikert7Puas:
-        return scoreFromScale(value, 7)
-    case domain.QuestionLikert7:
-        return scoreFromScale(value, 7)
     default:
         return 0, false
     }
 }
 
 func scoreFromYesNo(value interface{}) (float64, bool) {
-    switch v := value.(type) {
-    case bool:
-        if v {
-            return 5, true
-        }
-        return 1, true
-    case string:
-        cleaned := strings.ToLower(strings.TrimSpace(v))
-        if cleaned == "ya" || cleaned == "yes" || cleaned == "true" {
-            return 5, true
-        }
-        if cleaned == "tidak" || cleaned == "no" || cleaned == "false" {
-            return 1, true
-        }
-    }
-    return 0, false
+	switch v := value.(type) {
+	case bool:
+		if v {
+			return 100, true
+		}
+		return 0, true
+	case string:
+		cleaned := strings.ToLower(strings.TrimSpace(v))
+		if cleaned == "ya" || cleaned == "yes" || cleaned == "true" {
+			return 100, true
+		}
+		if cleaned == "tidak" || cleaned == "no" || cleaned == "false" {
+			return 0, true
+		}
+	}
+	return 0, false
 }
 
 func scoreFromScale(value interface{}, max int) (float64, bool) {
@@ -72,8 +64,29 @@ func scoreFromScale(value interface{}, max int) (float64, bool) {
     default:
         return 0, false
     }
-    if numeric < 1 || numeric > float64(max) {
-        return 0, false
-    }
-    return numeric, true
+	if numeric < 1 || numeric > float64(max) {
+		return 0, false
+	}
+	return normalizeToHundred(numeric, max), true
+}
+
+func normalizeToHundred(value float64, max int) float64 {
+	if max <= 1 {
+		return 100
+	}
+	normalized := ((value - 1) * 100) / float64(max-1)
+	if normalized < 0 {
+		return 0
+	}
+	if normalized > 100 {
+		return 100
+	}
+	return normalized
+}
+
+func normalizeLegacyScore(score float64) float64 {
+	if score > 0 && score <= 5 {
+		return normalizeToHundred(score, 5)
+	}
+	return score
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+    "errors"
     "net/http"
 
     "unila_helpdesk_backend/internal/service"
@@ -36,8 +37,13 @@ func (handler *AuthHandler) login(c *gin.Context) {
         respondError(c, http.StatusBadRequest, "payload tidak valid")
         return
     }
-    result, err := handler.auth.LoginWithPassword(req.Username, req.Password)
+    clientType := c.GetHeader("X-Client-Type")
+    result, err := handler.auth.LoginWithPasswordClient(req.Username, req.Password, clientType)
     if err != nil {
+        if errors.Is(err, service.ErrAdminWebOnly) {
+            respondError(c, http.StatusForbidden, err.Error())
+            return
+        }
         respondError(c, http.StatusUnauthorized, err.Error())
         return
     }
@@ -50,8 +56,13 @@ func (handler *AuthHandler) refreshToken(c *gin.Context) {
         respondError(c, http.StatusBadRequest, "payload tidak valid")
         return
     }
-    result, err := handler.auth.RefreshWithToken(req.RefreshToken)
+    clientType := c.GetHeader("X-Client-Type")
+    result, err := handler.auth.RefreshWithTokenClient(req.RefreshToken, clientType)
     if err != nil {
+        if errors.Is(err, service.ErrAdminWebOnly) {
+            respondError(c, http.StatusForbidden, err.Error())
+            return
+        }
         respondError(c, http.StatusUnauthorized, err.Error())
         return
     }

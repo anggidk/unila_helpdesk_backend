@@ -3,6 +3,7 @@ package service
 import (
     "encoding/json"
     "errors"
+    "fmt"
     "sort"
     "strconv"
     "strings"
@@ -163,16 +164,17 @@ func calculateCohortScores(responses []domain.SurveyResponse) (float64, float64)
     var count int
     var responsesWithScore int
 
-    for _, response := range responses {
-        score := response.Score
-        if score <= 0 {
-            parsed := scoreFromAnswers(json.RawMessage(response.Answers))
-            score = parsed
-        }
-        if score > 0 {
-            total += score
-            count++
-            responsesWithScore++
+	for _, response := range responses {
+		score := response.Score
+		if score <= 0 {
+			parsed := scoreFromAnswers(json.RawMessage(response.Answers))
+			score = parsed
+		}
+		score = normalizeLegacyScore(score)
+		if score > 0 {
+			total += score
+			count++
+			responsesWithScore++
         }
     }
 
@@ -204,35 +206,107 @@ func scoreFromAnswers(raw json.RawMessage) float64 {
 }
 
 func scoreFromValue(value interface{}) (float64, bool) {
-    switch v := value.(type) {
-    case float64:
-        if v >= 1 && v <= 5 {
-            return v, true
-        }
-    case int:
-        if v >= 1 && v <= 5 {
-            return float64(v), true
-        }
-    case bool:
-        if v {
-            return 5, true
-        }
-        return 1, true
-    case string:
-        cleaned := strings.ToLower(strings.TrimSpace(v))
-        if cleaned == "ya" || cleaned == "yes" || cleaned == "true" {
-            return 5, true
-        }
-        if cleaned == "tidak" || cleaned == "no" || cleaned == "false" {
-            return 1, true
-        }
-        if parsed, err := strconv.ParseFloat(cleaned, 64); err == nil {
-            if parsed >= 1 && parsed <= 5 {
-                return parsed, true
-            }
-        }
-    }
-    return 0, false
+	switch v := value.(type) {
+	case float64:
+		if v >= 1 && v <= 5 {
+			return normalizeToHundred(v, 5), true
+		}
+	case int:
+		if v >= 1 && v <= 5 {
+			return normalizeToHundred(float64(v), 5), true
+		}
+	case bool:
+		if v {
+			return 100, true
+		}
+		return 0, true
+	case string:
+		cleaned := strings.ToLower(strings.TrimSpace(v))
+		if cleaned == "ya" || cleaned == "yes" || cleaned == "true" {
+			return 100, true
+		}
+		if cleaned == "tidak" || cleaned == "no" || cleaned == "false" {
+			return 0, true
+		}
+		if parsed, err := strconv.ParseFloat(cleaned, 64); err == nil {
+			if parsed >= 1 && parsed <= 5 {
+				return normalizeToHundred(parsed, 5), true
+			}
+		}
+	}
+	return 0, false
+}
+
+func answerKey(value interface{}, questionType domain.SurveyQuestionType) (string, bool) {
+	switch questionType {
+	case domain.QuestionYesNo:
+		switch v := value.(type) {
+		case bool:
+			if v {
+				return "Ya", true
+			}
+			return "Tidak", true
+		case string:
+			cleaned := strings.ToLower(strings.TrimSpace(v))
+			if cleaned == "ya" || cleaned == "yes" || cleaned == "true" {
+				return "Ya", true
+			}
+			if cleaned == "tidak" || cleaned == "no" || cleaned == "false" {
+				return "Tidak", true
+			}
+		}
+		return "", false
+	case domain.QuestionMultipleChoice:
+		choice := strings.TrimSpace(fmt.Sprintf("%v", value))
+		if choice == "" {
+			return "", false
+		}
+		return choice, true
+	case domain.QuestionText:
+		return "", false
+	default:
+		max := scaleMaxFor(questionType)
+		if max <= 0 {
+			return "", false
+		}
+		if numeric, ok := parseNumericValue(value); ok {
+			if numeric >= 1 && numeric <= float64(max) {
+				return strconv.Itoa(int(numeric)), true
+			}
+		}
+	}
+	return "", false
+}
+
+func scaleMaxFor(questionType domain.SurveyQuestionType) int {
+	switch questionType {
+	case domain.QuestionLikert3, domain.QuestionLikert3Puas:
+		return 3
+	case domain.QuestionLikert4, domain.QuestionLikert4Puas:
+		return 4
+	case domain.QuestionLikert, domain.QuestionLikertQuality:
+		return 5
+	default:
+		return 0
+	}
+}
+
+func parseNumericValue(value interface{}) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		return v, true
+	case int:
+		return float64(v), true
+	case string:
+		cleaned := strings.TrimSpace(v)
+		parsed, err := strconv.ParseFloat(cleaned, 64)
+		if err != nil {
+			return 0, false
+		}
+		return parsed, true
+	default:
+		return 0, false
+	}
 }
 
 
@@ -306,13 +380,14 @@ func (service *ReportService) DashboardSummary() (domain.DashboardSummaryDTO, er
         return domain.DashboardSummaryDTO{}, err
     }
 
-    var avgScore float64
-    if err := service.db.Model(&domain.SurveyResponse{}).
-        Where("score > 0").
-        Select("COALESCE(AVG(score), 0)").
-        Scan(&avgScore).Error; err != nil {
-        return domain.DashboardSummaryDTO{}, err
-    }
+	var avgScore float64
+	if err := service.db.Model(&domain.SurveyResponse{}).
+		Where("score > 0").
+		Select("COALESCE(AVG(score), 0)").
+		Scan(&avgScore).Error; err != nil {
+		return domain.DashboardSummaryDTO{}, err
+	}
+	avgScore = normalizeLegacyScore(avgScore)
 
     return domain.DashboardSummaryDTO{
         TotalTickets:       int(totalTickets),
@@ -352,14 +427,16 @@ func (service *ReportService) ServiceSatisfactionSummary(period string, periods 
         }
     }
 
-    totalWeighted := 0.0
-    for _, row := range rows {
-        totalWeighted += row.AvgScore * float64(row.Responses)
-    }
+	totalWeighted := 0.0
+	for _, row := range rows {
+		row.AvgScore = normalizeLegacyScore(row.AvgScore)
+		totalWeighted += row.AvgScore * float64(row.Responses)
+	}
 
     result := make([]domain.ServiceSatisfactionDTO, 0, len(rows))
-    for _, row := range rows {
-        label := categories[row.CategoryID]
+	for _, row := range rows {
+		row.AvgScore = normalizeLegacyScore(row.AvgScore)
+		label := categories[row.CategoryID]
         if label == "" {
             label = row.CategoryID
         }
@@ -380,10 +457,10 @@ func (service *ReportService) ServiceSatisfactionSummary(period string, periods 
 }
 
 func (service *ReportService) SurveySatisfaction(
-    categoryID string,
-    templateID string,
-    period string,
-    periods int,
+	categoryID string,
+	templateID string,
+	period string,
+	periods int,
 ) (*domain.SurveySatisfactionDTO, error) {
     if categoryID == "" && templateID == "" {
         return nil, gorm.ErrRecordNotFound
@@ -482,7 +559,96 @@ func (service *ReportService) SurveySatisfaction(
         End:        end,
         Rows:       rows,
     }
-    return report, nil
+	return report, nil
+}
+
+func (service *ReportService) SurveySatisfactionExport(
+	categoryID string,
+	templateID string,
+	period string,
+	periods int,
+) (*domain.SurveySatisfactionExportDTO, error) {
+	if strings.TrimSpace(categoryID) == "" {
+		return nil, errors.New("categoryId wajib diisi")
+	}
+
+	var template domain.SurveyTemplate
+	if templateID != "" {
+		if err := service.db.Preload("Questions", func(db *gorm.DB) *gorm.DB {
+			return db.Order("created_at asc")
+		}).First(&template, "id = ?", templateID).Error; err != nil {
+			return nil, err
+		}
+	} else {
+		var category domain.ServiceCategory
+		if err := service.db.First(&category, "id = ?", categoryID).Error; err != nil {
+			return nil, err
+		}
+		if category.SurveyTemplateID == "" {
+			return nil, gorm.ErrRecordNotFound
+		}
+		if err := service.db.Preload("Questions", func(db *gorm.DB) *gorm.DB {
+			return db.Order("created_at asc")
+		}).First(&template, "id = ?", category.SurveyTemplateID).Error; err != nil {
+			return nil, err
+		}
+	}
+
+	start, end := periodRange(period, periods, service.now)
+
+	var responses []domain.SurveyResponse
+	query := service.db.Model(&domain.SurveyResponse{}).
+		Joins("JOIN tickets t ON t.id = survey_responses.ticket_id").
+		Where("survey_responses.created_at >= ? AND survey_responses.created_at < ?", start, end).
+		Where("t.category_id = ?", categoryID)
+	if template.ID != "" {
+		query = query.Where("survey_responses.template_id = ?", template.ID)
+	}
+	if err := query.Order("survey_responses.created_at asc").Find(&responses).Error; err != nil {
+		return nil, err
+	}
+
+	questions := make([]domain.SurveySatisfactionExportQuestionDTO, 0, len(template.Questions))
+	for _, question := range template.Questions {
+		questions = append(questions, domain.SurveySatisfactionExportQuestionDTO{
+			ID:   question.ID,
+			Text: question.Text,
+			Type: string(question.Type),
+		})
+	}
+
+	responseDTOs := make([]domain.SurveySatisfactionExportResponseDTO, 0, len(responses))
+	for _, response := range responses {
+		responseDTOs = append(responseDTOs, domain.SurveySatisfactionExportResponseDTO{
+			ID:        response.ID,
+			TicketID:  response.TicketID,
+			UserID:    response.UserID,
+			Score:     response.Score,
+			CreatedAt: response.CreatedAt,
+			Answers:   response.Answers,
+		})
+	}
+
+	categoryName := categoryID
+	var category domain.ServiceCategory
+	if err := service.db.First(&category, "id = ?", categoryID).Error; err == nil {
+		if category.Name != "" {
+			categoryName = category.Name
+		}
+	}
+
+	report := &domain.SurveySatisfactionExportDTO{
+		TemplateID: template.ID,
+		Template:   template.Title,
+		CategoryID: categoryID,
+		Category:   categoryName,
+		Period:     normalizePeriod(period),
+		Start:      start,
+		End:        end,
+		Questions:  questions,
+		Responses:  responseDTOs,
+	}
+	return report, nil
 }
 
 func (service *ReportService) TemplatesByCategory(categoryID string) ([]domain.SurveyTemplateDTO, error) {
@@ -729,6 +895,7 @@ func mapSurveyTemplateDTO(template domain.SurveyTemplate) domain.SurveyTemplateD
         ID:          template.ID,
         Title:       template.Title,
         Description: template.Description,
+        Framework:   template.Framework,
         CategoryID:  template.CategoryID,
         Questions:   questions,
         CreatedAt:   template.CreatedAt,

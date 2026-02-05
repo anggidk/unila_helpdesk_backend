@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+    "time"
+
+    "gorm.io/datatypes"
+)
 
 type UserDTO struct {
     ID     string   `json:"id"`
@@ -67,6 +71,7 @@ type SurveyTemplateDTO struct {
     ID          string              `json:"id"`
     Title       string              `json:"title"`
     Description string              `json:"description"`
+    Framework   string              `json:"framework"`
     CategoryID  string              `json:"categoryId"`
     Questions   []SurveyQuestionDTO `json:"questions"`
     CreatedAt   time.Time           `json:"createdAt"`
@@ -133,6 +138,33 @@ type SurveySatisfactionDTO struct {
     Start      time.Time                  `json:"start"`
     End        time.Time                  `json:"end"`
     Rows       []SurveySatisfactionRowDTO `json:"rows"`
+}
+
+type SurveySatisfactionExportQuestionDTO struct {
+    ID   string `json:"id"`
+    Text string `json:"text"`
+    Type string `json:"type"`
+}
+
+type SurveySatisfactionExportResponseDTO struct {
+    ID        string         `json:"id"`
+    TicketID  string         `json:"ticketId"`
+    UserID    string         `json:"userId"`
+    Score     float64        `json:"score"`
+    CreatedAt time.Time      `json:"createdAt"`
+    Answers   datatypes.JSON `json:"answers"`
+}
+
+type SurveySatisfactionExportDTO struct {
+    TemplateID string                              `json:"templateId"`
+    Template   string                              `json:"template"`
+    CategoryID string                              `json:"categoryId"`
+    Category   string                              `json:"category"`
+    Period     string                              `json:"period"`
+    Start      time.Time                           `json:"start"`
+    End        time.Time                           `json:"end"`
+    Questions  []SurveySatisfactionExportQuestionDTO `json:"questions"`
+    Responses  []SurveySatisfactionExportResponseDTO `json:"responses"`
 }
 
 type SurveyResponseItemDTO struct {

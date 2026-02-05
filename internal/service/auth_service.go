@@ -48,6 +48,8 @@ func NewAuthService(
     }
 }
 
+var ErrAdminWebOnly = errors.New("akun admin hanya bisa login via web")
+
 type Claims struct {
     UserID string          `json:"uid"`
     Role   domain.UserRole `json:"role"`
@@ -110,6 +112,10 @@ func (service *AuthService) IssueToken(user domain.User) (AuthResult, error) {
 }
 
 func (service *AuthService) LoginWithPassword(username string, password string) (AuthResult, error) {
+    return service.LoginWithPasswordClient(username, password, "")
+}
+
+func (service *AuthService) LoginWithPasswordClient(username string, password string, clientType string) (AuthResult, error) {
     cleanedUser := strings.ToLower(strings.TrimSpace(username))
     cleanedPass := strings.TrimSpace(password)
     if cleanedUser == "" || cleanedPass == "" {
@@ -131,10 +137,17 @@ func (service *AuthService) LoginWithPassword(username string, password string) 
         return AuthResult{}, errors.New("username atau password salah")
     }
 
+    if err := ensureAdminAllowed(*user, clientType); err != nil {
+        return AuthResult{}, err
+    }
     return service.IssueToken(*user)
 }
 
 func (service *AuthService) RefreshWithToken(refreshToken string) (AuthResult, error) {
+    return service.RefreshWithTokenClient(refreshToken, "")
+}
+
+func (service *AuthService) RefreshWithTokenClient(refreshToken string, clientType string) (AuthResult, error) {
     token := strings.TrimSpace(refreshToken)
     if token == "" {
         return AuthResult{}, errors.New("refresh token wajib diisi")
@@ -152,8 +165,21 @@ func (service *AuthService) RefreshWithToken(refreshToken string) (AuthResult, e
     if err != nil {
         return AuthResult{}, errors.New("user tidak ditemukan")
     }
+    if err := ensureAdminAllowed(*user, clientType); err != nil {
+        return AuthResult{}, err
+    }
     _ = service.refreshTokens.DeleteByID(stored.ID)
     return service.IssueToken(*user)
+}
+
+func ensureAdminAllowed(user domain.User, clientType string) error {
+    if user.Role != domain.RoleAdmin {
+        return nil
+    }
+    if strings.ToLower(strings.TrimSpace(clientType)) == "web" {
+        return nil
+    }
+    return ErrAdminWebOnly
 }
 
 func (service *AuthService) ParseToken(tokenString string) (*Claims, error) {

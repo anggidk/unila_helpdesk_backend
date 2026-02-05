@@ -1,8 +1,12 @@
 package handler
 
 import (
+    "encoding/csv"
+    "encoding/json"
+    "fmt"
     "net/http"
     "strconv"
+    "strings"
     "time"
 
     "unila_helpdesk_backend/internal/service"
@@ -21,9 +25,10 @@ func NewReportHandler(reports *service.ReportService) *ReportHandler {
 func (handler *ReportHandler) RegisterRoutes(admin *gin.RouterGroup) {
     admin.GET("/reports/summary", handler.dashboardSummary)
     admin.GET("/reports", handler.serviceTrends)
-    admin.GET("/reports/satisfaction-summary", handler.satisfactionSummary)
+	admin.GET("/reports/satisfaction-summary", handler.satisfactionSummary)
 	admin.GET("/reports/cohort", handler.cohortReport)
 	admin.GET("/reports/satisfaction", handler.surveySatisfaction)
+	admin.GET("/reports/satisfaction/export", handler.surveySatisfactionExport)
 	admin.GET("/reports/templates", handler.templatesByCategory)
 	admin.GET("/reports/usage", handler.usageCohort)
 	admin.GET("/reports/entity-service", handler.entityService)
@@ -118,7 +123,78 @@ func (handler *ReportHandler) surveySatisfaction(c *gin.Context) {
         respondError(c, http.StatusBadRequest, err.Error())
         return
     }
-    respondOK(c, report)
+	respondOK(c, report)
+}
+
+func (handler *ReportHandler) surveySatisfactionExport(c *gin.Context) {
+	periods := 5
+	if raw := c.Query("periods"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			periods = parsed
+		}
+	} else if raw := c.Query("months"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			periods = parsed
+		}
+	}
+	period := c.DefaultQuery("period", "monthly")
+	categoryID := c.Query("categoryId")
+	templateID := c.Query("templateId")
+	report, err := handler.reports.SurveySatisfactionExport(categoryID, templateID, period, periods)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	filename := fmt.Sprintf(
+		"survey_export_%s_%s_%s.csv",
+		sanitizeFilename(report.CategoryID),
+		sanitizeFilename(report.TemplateID),
+		time.Now().Format("20060102_150405"),
+	)
+	c.Header("Content-Description", "File Transfer")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+
+	writer := csv.NewWriter(c.Writer)
+	defer writer.Flush()
+
+	header := []string{
+		"Kategori",
+		"Template",
+		"Ticket ID",
+		"User ID",
+		"Tanggal",
+		"Skor(0-100)",
+	}
+	for idx, question := range report.Questions {
+		header = append(header, fmt.Sprintf("Q%d - %s", idx+1, question.Text))
+	}
+	if err := writer.Write(header); err != nil {
+		return
+	}
+
+	for _, response := range report.Responses {
+		values := make([]string, 0, len(header))
+		values = append(values,
+			report.Category,
+			report.Template,
+			response.TicketID,
+			response.UserID,
+			response.CreatedAt.Format(time.RFC3339),
+			fmt.Sprintf("%.2f", response.Score),
+		)
+		answers := make(map[string]interface{})
+		if err := json.Unmarshal(response.Answers, &answers); err != nil {
+			answers = map[string]interface{}{}
+		}
+		for _, question := range report.Questions {
+			values = append(values, formatAnswerValue(answers[question.ID]))
+		}
+		if err := writer.Write(values); err != nil {
+			return
+		}
+	}
 }
 
 func (handler *ReportHandler) templatesByCategory(c *gin.Context) {
@@ -168,5 +244,36 @@ func (handler *ReportHandler) entityService(c *gin.Context) {
         respondError(c, http.StatusInternalServerError, err.Error())
         return
     }
-    respondOK(c, rows)
+	respondOK(c, rows)
+}
+
+func sanitizeFilename(value string) string {
+	if value == "" {
+		return "all"
+	}
+	replacer := strings.NewReplacer(" ", "_", "/", "_", "\\", "_")
+	return replacer.Replace(value)
+}
+
+func formatAnswerValue(value interface{}) string {
+	switch v := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return v
+	case bool:
+		if v {
+			return "Ya"
+		}
+		return "Tidak"
+	case float64:
+		if v == float64(int(v)) {
+			return strconv.Itoa(int(v))
+		}
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case int:
+		return strconv.Itoa(v)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }

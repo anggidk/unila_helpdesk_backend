@@ -40,10 +40,6 @@ const (
     QuestionLikert3Puas    SurveyQuestionType = "likert3Puas"
     QuestionLikert3        SurveyQuestionType = "likert3"
     QuestionLikert4Puas    SurveyQuestionType = "likert4Puas"
-    QuestionLikert7        SurveyQuestionType = "likert7"
-    QuestionLikert7Puas    SurveyQuestionType = "likert7Puas"
-    QuestionLikert6        SurveyQuestionType = "likert6"
-    QuestionLikert6Puas    SurveyQuestionType = "likert6Puas"
     QuestionLikert4        SurveyQuestionType = "likert4"
     QuestionYesNo          SurveyQuestionType = "yesNo"
     QuestionMultipleChoice SurveyQuestionType = "multipleChoice"
@@ -117,6 +113,7 @@ type SurveyTemplate struct {
     ID          string           `gorm:"primaryKey;size:64"`
     Title       string           `gorm:"size:160"`
     Description string           `gorm:"type:text"`
+    Framework   string           `gorm:"size:80"`
     CategoryID  string           `gorm:"size:60;index"`
     Questions   []SurveyQuestion `gorm:"foreignKey:TemplateID"`
     CreatedAt   time.Time
