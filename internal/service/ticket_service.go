@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -108,6 +109,9 @@ func (service *TicketService) CreateTicket(ctx context.Context, user domain.User
 		CreatedAt:      service.now(),
 		UpdatedAt:      service.now(),
 	}
+	if payload := marshalAttachments(req.Attachments); payload != nil {
+		ticket.Attachments = payload
+	}
 
 	if err := service.tickets.Create(&ticket); err != nil {
 		return domain.TicketDTO{}, err
@@ -186,6 +190,9 @@ func (service *TicketService) CreateGuestTicket(ctx context.Context, req GuestTi
 		SurveyRequired: false,
 		CreatedAt:      service.now(),
 		UpdatedAt:      service.now(),
+	}
+	if payload := marshalAttachments(req.Attachments); payload != nil {
+		ticket.Attachments = payload
 	}
 
 	if err := service.tickets.Create(&ticket); err != nil {
@@ -487,6 +494,10 @@ func (service *TicketService) toTicketDTO(ticket domain.Ticket, category domain.
 	}
 
 	surveyScore = normalizeLegacyScore(surveyScore)
+	attachments := []string{}
+	if len(ticket.Attachments) > 0 {
+		_ = json.Unmarshal(ticket.Attachments, &attachments)
+	}
 	return domain.TicketDTO{
 		ID:             ticket.ID,
 		Title:          ticket.Title,
@@ -499,11 +510,33 @@ func (service *TicketService) toTicketDTO(ticket domain.Ticket, category domain.
 		Reporter:       ticket.ReporterName,
 		IsGuest:        ticket.IsGuest,
 		Assignee:       ticket.Assignee,
+		Attachments:    attachments,
 		History:        history,
 		Comments:       comments,
 		SurveyRequired: ticket.SurveyRequired,
 		SurveyScore:    surveyScore,
 	}
+}
+
+func marshalAttachments(values []string) []byte {
+	if len(values) == 0 {
+		return nil
+	}
+	cleaned := make([]string, 0, len(values))
+	for _, value := range values {
+		item := strings.TrimSpace(value)
+		if item != "" {
+			cleaned = append(cleaned, item)
+		}
+	}
+	if len(cleaned) == 0 {
+		return nil
+	}
+	payload, err := json.Marshal(cleaned)
+	if err != nil {
+		return nil
+	}
+	return payload
 }
 
 func (service *TicketService) mapTickets(tickets []domain.Ticket, scores map[string]float64) []domain.TicketDTO {

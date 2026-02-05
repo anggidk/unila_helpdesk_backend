@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"unila_helpdesk_backend/internal/config"
@@ -64,8 +65,13 @@ func main() {
 	surveyHandler := handler.NewSurveyHandler(surveyService)
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 	reportHandler := handler.NewReportHandler(reportService)
+	uploadDir := "uploads"
+	uploadHandler := handler.NewUploadHandler(cfg.BaseURL, uploadDir)
 
 	router := gin.Default()
+	router.MaxMultipartMemory = 8 << 20
+	_ = os.MkdirAll(uploadDir, 0o755)
+	router.Static("/uploads", "./"+uploadDir)
 	corsOrigins := strings.Split(cfg.CORSOrigins, ",")
 	for i, origin := range corsOrigins {
 		corsOrigins[i] = strings.TrimSpace(origin)
@@ -90,6 +96,7 @@ func main() {
 	surveyHandler.RegisterRoutes(public, authGroup, adminGroup)
 	notificationHandler.RegisterRoutes(authGroup)
 	reportHandler.RegisterRoutes(adminGroup)
+	uploadHandler.RegisterRoutes(public)
 
 	log.Printf("%s running on :%s", cfg.AppName, cfg.HTTPPort)
 	if err := router.Run(":" + cfg.HTTPPort); err != nil {

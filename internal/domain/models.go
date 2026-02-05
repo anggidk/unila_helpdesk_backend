@@ -81,6 +81,7 @@ type Ticket struct {
     IsGuest        bool           `gorm:"default:false"`
     Assignee       string         `gorm:"size:120"`
     SurveyRequired bool           `gorm:"default:false"`
+    Attachments    datatypes.JSON `gorm:"type:jsonb"`
     CreatedAt      time.Time
     UpdatedAt      time.Time
     DeletedAt      gorm.DeletedAt `gorm:"index"`

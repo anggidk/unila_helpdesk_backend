@@ -39,6 +39,7 @@ type TicketDTO struct {
     Reporter   string            `json:"reporter"`
     IsGuest    bool              `json:"isGuest"`
     Assignee   string            `json:"assignee,omitempty"`
+    Attachments []string         `json:"attachments"`
     History    []TicketHistoryDTO `json:"history"`
     Comments   []TicketCommentDTO `json:"comments"`
     SurveyRequired bool          `json:"surveyRequired"`
