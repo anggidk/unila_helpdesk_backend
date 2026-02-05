@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -20,6 +22,7 @@ type TicketService struct {
 	categories    *repository.CategoryRepository
 	notifications *repository.NotificationRepository
 	tokens        *repository.FCMTokenRepository
+	attachments  *repository.AttachmentRepository
 	fcmClient     *fcm.Client
 	now           func() time.Time
 }
@@ -55,6 +58,7 @@ func NewTicketService(
 	categories *repository.CategoryRepository,
 	notifications *repository.NotificationRepository,
 	tokens *repository.FCMTokenRepository,
+	attachments *repository.AttachmentRepository,
 	fcmClient *fcm.Client,
 ) *TicketService {
 	return &TicketService{
@@ -62,6 +66,7 @@ func NewTicketService(
 		categories:    categories,
 		notifications: notifications,
 		tokens:        tokens,
+		attachments:  attachments,
 		fcmClient:     fcmClient,
 		now:           time.Now,
 	}
@@ -116,6 +121,7 @@ func (service *TicketService) CreateTicket(ctx context.Context, user domain.User
 	if err := service.tickets.Create(&ticket); err != nil {
 		return domain.TicketDTO{}, err
 	}
+	_ = service.attachments.AttachToTicket(attachmentIDsFromRefs(req.Attachments), ticket.ID)
 
 	history := domain.TicketHistory{
 		ID:          util.NewUUID(),
@@ -198,6 +204,7 @@ func (service *TicketService) CreateGuestTicket(ctx context.Context, req GuestTi
 	if err := service.tickets.Create(&ticket); err != nil {
 		return domain.TicketDTO{}, err
 	}
+	_ = service.attachments.AttachToTicket(attachmentIDsFromRefs(req.Attachments), ticket.ID)
 
 	history := domain.TicketHistory{
 		ID:          util.NewUUID(),
@@ -537,6 +544,26 @@ func marshalAttachments(values []string) []byte {
 		return nil
 	}
 	return payload
+}
+
+func attachmentIDsFromRefs(refs []string) []string {
+	ids := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		cleaned := strings.TrimSpace(ref)
+		if cleaned == "" {
+			continue
+		}
+		parsed, err := url.Parse(cleaned)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			ids = append(ids, cleaned)
+			continue
+		}
+		base := path.Base(parsed.Path)
+		if base != "" && base != "." && base != "/" && base != "uploads" {
+			ids = append(ids, base)
+		}
+	}
+	return ids
 }
 
 func (service *TicketService) mapTickets(tickets []domain.Ticket, scores map[string]float64) []domain.TicketDTO {

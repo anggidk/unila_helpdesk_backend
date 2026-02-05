@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"net/http"
-	"os"
 	"strings"
 
 	"unila_helpdesk_backend/internal/config"
@@ -47,6 +46,7 @@ func main() {
 	notificationRepo := repository.NewNotificationRepository(database)
 	tokenRepo := repository.NewFCMTokenRepository(database)
 	refreshTokenRepo := repository.NewRefreshTokenRepository(database)
+	attachmentRepo := repository.NewAttachmentRepository(database)
 
 	for _, category := range service.DefaultCategories() {
 		_ = categoryRepo.Upsert(category)
@@ -54,7 +54,7 @@ func main() {
 
 	authService := service.NewAuthService(cfg, userRepo, refreshTokenRepo)
 	fcmClient := fcm.NewClient(cfg.FCMEnabled, cfg.FCMCredentials)
-	ticketService := service.NewTicketService(ticketRepo, categoryRepo, notificationRepo, tokenRepo, fcmClient)
+	ticketService := service.NewTicketService(ticketRepo, categoryRepo, notificationRepo, tokenRepo, attachmentRepo, fcmClient)
 	surveyService := service.NewSurveyService(surveyRepo, ticketRepo)
 	notificationService := service.NewNotificationService(notificationRepo, tokenRepo)
 	reportService := service.NewReportService(database)
@@ -65,13 +65,10 @@ func main() {
 	surveyHandler := handler.NewSurveyHandler(surveyService)
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 	reportHandler := handler.NewReportHandler(reportService)
-	uploadDir := "uploads"
-	uploadHandler := handler.NewUploadHandler(cfg.BaseURL, uploadDir)
+	uploadHandler := handler.NewUploadHandler(cfg.BaseURL, attachmentRepo)
 
 	router := gin.Default()
 	router.MaxMultipartMemory = 8 << 20
-	_ = os.MkdirAll(uploadDir, 0o755)
-	router.Static("/uploads", "./"+uploadDir)
 	corsOrigins := strings.Split(cfg.CORSOrigins, ",")
 	for i, origin := range corsOrigins {
 		corsOrigins[i] = strings.TrimSpace(origin)

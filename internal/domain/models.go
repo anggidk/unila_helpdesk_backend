@@ -110,6 +110,16 @@ type TicketComment struct {
     CreatedAt time.Time
 }
 
+type Attachment struct {
+    ID          string    `gorm:"primaryKey;size:64"`
+    TicketID    string    `gorm:"size:64;index"`
+    Filename    string    `gorm:"size:180"`
+    ContentType string    `gorm:"size:80"`
+    Size        int64
+    Data        []byte    `gorm:"type:bytea"`
+    CreatedAt   time.Time
+}
+
 type SurveyTemplate struct {
     ID          string           `gorm:"primaryKey;size:64"`
     Title       string           `gorm:"size:160"`

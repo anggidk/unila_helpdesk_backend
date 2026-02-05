@@ -118,6 +118,7 @@ func AutoMigrate(database *gorm.DB) error {
         &domain.User{},
         &domain.ServiceCategory{},
         &domain.Ticket{},
+        &domain.Attachment{},
         &domain.TicketHistory{},
         &domain.TicketComment{},
         &domain.SurveyTemplate{},
