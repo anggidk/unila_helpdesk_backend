@@ -47,20 +47,22 @@ func main() {
 	tokenRepo := repository.NewFCMTokenRepository(database)
 	refreshTokenRepo := repository.NewRefreshTokenRepository(database)
 	attachmentRepo := repository.NewAttachmentRepository(database)
+	reportRepo := repository.NewReportRepository(database)
 
 	for _, category := range service.DefaultCategories() {
 		_ = categoryRepo.Upsert(category)
 	}
 
 	authService := service.NewAuthService(cfg, userRepo, refreshTokenRepo)
+	categoryService := service.NewCategoryService(categoryRepo)
 	fcmClient := fcm.NewClient(cfg.FCMEnabled, cfg.FCMCredentials)
 	ticketService := service.NewTicketService(ticketRepo, categoryRepo, notificationRepo, tokenRepo, attachmentRepo, fcmClient)
 	surveyService := service.NewSurveyService(surveyRepo, ticketRepo)
 	notificationService := service.NewNotificationService(notificationRepo, tokenRepo)
-	reportService := service.NewReportService(database)
+	reportService := service.NewReportService(reportRepo)
 
 	authHandler := handler.NewAuthHandler(authService)
-	categoryHandler := handler.NewCategoryHandler(categoryRepo)
+	categoryHandler := handler.NewCategoryHandler(categoryService)
 	ticketHandler := handler.NewTicketHandler(ticketService)
 	surveyHandler := handler.NewSurveyHandler(surveyService)
 	notificationHandler := handler.NewNotificationHandler(notificationService)
