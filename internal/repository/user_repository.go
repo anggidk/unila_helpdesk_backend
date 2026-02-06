@@ -8,6 +8,15 @@ import (
 	"gorm.io/gorm"
 )
 
+// UserRepositoryInterface defines the contract for user data access
+type UserRepositoryInterface interface {
+	Create(user *domain.User) error
+	UpsertByEmail(user *domain.User) error
+	FindByID(id string) (*domain.User, error)
+	FindByEmail(email string) (*domain.User, error)
+	FindByUsername(username string) (*domain.User, error)
+}
+
 type UserRepository struct {
 	db *gorm.DB
 }

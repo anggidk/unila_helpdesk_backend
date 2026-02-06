@@ -18,11 +18,11 @@ import (
 )
 
 type TicketService struct {
-	tickets       *repository.TicketRepository
-	categories    *repository.CategoryRepository
-	notifications *repository.NotificationRepository
-	tokens        *repository.FCMTokenRepository
-	attachments  *repository.AttachmentRepository
+	tickets       repository.TicketRepositoryInterface
+	categories    repository.CategoryRepositoryInterface
+	notifications repository.NotificationRepositoryInterface
+	tokens        repository.FCMTokenRepositoryInterface
+	attachments   repository.AttachmentRepositoryInterface
 	fcmClient     *fcm.Client
 	now           func() time.Time
 }
@@ -54,11 +54,11 @@ type TicketUpdateRequest struct {
 }
 
 func NewTicketService(
-	tickets *repository.TicketRepository,
-	categories *repository.CategoryRepository,
-	notifications *repository.NotificationRepository,
-	tokens *repository.FCMTokenRepository,
-	attachments *repository.AttachmentRepository,
+	tickets repository.TicketRepositoryInterface,
+	categories repository.CategoryRepositoryInterface,
+	notifications repository.NotificationRepositoryInterface,
+	tokens repository.FCMTokenRepositoryInterface,
+	attachments repository.AttachmentRepositoryInterface,
 	fcmClient *fcm.Client,
 ) *TicketService {
 	return &TicketService{
@@ -66,7 +66,7 @@ func NewTicketService(
 		categories:    categories,
 		notifications: notifications,
 		tokens:        tokens,
-		attachments:  attachments,
+		attachments:   attachments,
 		fcmClient:     fcmClient,
 		now:           time.Now,
 	}
