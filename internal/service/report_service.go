@@ -13,6 +13,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var reportLocationWIB = time.FixedZone("WIB", 7*60*60)
+
 type ReportService struct {
 	reports    *repository.ReportRepository
 	categories *repository.CategoryRepository
@@ -38,7 +40,7 @@ func (service *ReportService) CohortReport(period string, periods int) ([]domain
 		periods = 5
 	}
 	unit := normalizePeriod(period)
-	now := service.now().UTC()
+	now := nowInWIB(service.now)
 	end := periodStart(now, unit)
 	start := addPeriods(end, unit, -(periods - 1))
 
@@ -116,20 +118,20 @@ func normalizePeriod(value string) string {
 }
 
 func periodStart(value time.Time, unit string) time.Time {
-	value = value.UTC()
+	value = value.In(reportLocationWIB)
 	switch unit {
 	case "daily":
-		return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
+		return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, reportLocationWIB)
 	case "weekly":
 		weekday := int(value.Weekday())
 		// Monday as start of week.
 		offset := (weekday + 6) % 7
 		start := value.AddDate(0, 0, -offset)
-		return time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
+		return time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, reportLocationWIB)
 	case "yearly":
-		return time.Date(value.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
+		return time.Date(value.Year(), 1, 1, 0, 0, 0, 0, reportLocationWIB)
 	default:
-		return time.Date(value.Year(), value.Month(), 1, 0, 0, 0, 0, time.UTC)
+		return time.Date(value.Year(), value.Month(), 1, 0, 0, 0, 0, reportLocationWIB)
 	}
 }
 
@@ -235,8 +237,8 @@ func (service *ReportService) DashboardSummary() (domain.DashboardSummaryDTO, er
 		return domain.DashboardSummaryDTO{}, err
 	}
 
-	now := service.now().UTC()
-	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	now := nowInWIB(service.now)
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, reportLocationWIB)
 	resolvedThisMonth, err := service.reports.CountResolvedTicketsInRange(
 		monthStart,
 		monthStart.AddDate(0, 1, 0),
@@ -504,7 +506,7 @@ func (service *ReportService) UsageCohort(period string, periods int) ([]domain.
 		periods = 5
 	}
 	unit := normalizePeriod(period)
-	now := service.now().UTC()
+	now := nowInWIB(service.now)
 	end := periodStart(now, unit)
 	start := addPeriods(end, unit, -(periods - 1))
 
@@ -604,10 +606,14 @@ func periodRange(period string, periods int, nowFn func() time.Time) (time.Time,
 		periods = 5
 	}
 	unit := normalizePeriod(period)
-	now := nowFn().UTC()
+	now := nowInWIB(nowFn)
 	end := addPeriods(periodStart(now, unit), unit, 1)
 	start := addPeriods(periodStart(now, unit), unit, -(periods - 1))
 	return start, end
+}
+
+func nowInWIB(nowFn func() time.Time) time.Time {
+	return nowFn().In(reportLocationWIB)
 }
 
 func (service *ReportService) resolveTemplate(

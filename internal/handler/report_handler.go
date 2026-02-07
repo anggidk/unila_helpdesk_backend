@@ -1,30 +1,32 @@
 package handler
 
 import (
-    "encoding/csv"
-    "encoding/json"
-    "fmt"
-    "net/http"
-    "strconv"
-    "strings"
-    "time"
+	"encoding/csv"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
-    "unila_helpdesk_backend/internal/service"
+	"unila_helpdesk_backend/internal/service"
 
-    "github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin"
 )
 
 type ReportHandler struct {
-    reports *service.ReportService
+	reports *service.ReportService
 }
 
+var reportHandlerLocationWIB = time.FixedZone("WIB", 7*60*60)
+
 func NewReportHandler(reports *service.ReportService) *ReportHandler {
-    return &ReportHandler{reports: reports}
+	return &ReportHandler{reports: reports}
 }
 
 func (handler *ReportHandler) RegisterRoutes(admin *gin.RouterGroup) {
-    admin.GET("/reports/summary", handler.dashboardSummary)
-    admin.GET("/reports", handler.serviceTrends)
+	admin.GET("/reports/summary", handler.dashboardSummary)
+	admin.GET("/reports", handler.serviceTrends)
 	admin.GET("/reports/satisfaction-summary", handler.satisfactionSummary)
 	admin.GET("/reports/cohort", handler.cohortReport)
 	admin.GET("/reports/satisfaction", handler.surveySatisfaction)
@@ -35,64 +37,65 @@ func (handler *ReportHandler) RegisterRoutes(admin *gin.RouterGroup) {
 }
 
 func (handler *ReportHandler) dashboardSummary(c *gin.Context) {
-    summary, err := handler.reports.DashboardSummary()
-    if err != nil {
-        respondError(c, http.StatusInternalServerError, err.Error())
-        return
-    }
-    respondOK(c, summary)
+	summary, err := handler.reports.DashboardSummary()
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondOK(c, summary)
 }
 
 func (handler *ReportHandler) serviceTrends(c *gin.Context) {
-    start := time.Now().AddDate(0, 0, -30)
-    end := time.Now().AddDate(0, 0, 1)
-    if rawStart := c.Query("start"); rawStart != "" {
-        if parsed, err := time.Parse(time.RFC3339, rawStart); err == nil {
-            start = parsed
-        }
-    }
-    if rawEnd := c.Query("end"); rawEnd != "" {
-        if parsed, err := time.Parse(time.RFC3339, rawEnd); err == nil {
-            end = parsed
-        }
-    }
-    trends, err := handler.reports.ServiceTrends(start, end)
-    if err != nil {
-        respondError(c, http.StatusInternalServerError, err.Error())
-        return
-    }
-    respondOK(c, trends)
+	now := time.Now().In(reportHandlerLocationWIB)
+	start := now.AddDate(0, 0, -30)
+	end := now.AddDate(0, 0, 1)
+	if rawStart := c.Query("start"); rawStart != "" {
+		if parsed, err := time.Parse(time.RFC3339, rawStart); err == nil {
+			start = parsed.In(reportHandlerLocationWIB)
+		}
+	}
+	if rawEnd := c.Query("end"); rawEnd != "" {
+		if parsed, err := time.Parse(time.RFC3339, rawEnd); err == nil {
+			end = parsed.In(reportHandlerLocationWIB)
+		}
+	}
+	trends, err := handler.reports.ServiceTrends(start, end)
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondOK(c, trends)
 }
 
 func (handler *ReportHandler) satisfactionSummary(c *gin.Context) {
 	period, periods := parsePeriodParams(c, 6)
-    rows, err := handler.reports.ServiceSatisfactionSummary(period, periods)
-    if err != nil {
-        respondError(c, http.StatusInternalServerError, err.Error())
-        return
-    }
-    respondOK(c, rows)
+	rows, err := handler.reports.ServiceSatisfactionSummary(period, periods)
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondOK(c, rows)
 }
 
 func (handler *ReportHandler) cohortReport(c *gin.Context) {
 	period, periods := parsePeriodParams(c, 5)
-    rows, err := handler.reports.CohortReport(period, periods)
-    if err != nil {
-        respondError(c, http.StatusInternalServerError, err.Error())
-        return
-    }
-    respondOK(c, rows)
+	rows, err := handler.reports.CohortReport(period, periods)
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondOK(c, rows)
 }
 
 func (handler *ReportHandler) surveySatisfaction(c *gin.Context) {
 	period, periods := parsePeriodParams(c, 5)
-    categoryID := c.Query("categoryId")
-    templateID := c.Query("templateId")
-    report, err := handler.reports.SurveySatisfaction(categoryID, templateID, period, periods)
-    if err != nil {
-        respondError(c, http.StatusBadRequest, err.Error())
-        return
-    }
+	categoryID := c.Query("categoryId")
+	templateID := c.Query("templateId")
+	report, err := handler.reports.SurveySatisfaction(categoryID, templateID, period, periods)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
 	respondOK(c, report)
 }
 
@@ -110,7 +113,7 @@ func (handler *ReportHandler) surveySatisfactionExport(c *gin.Context) {
 		"survey_export_%s_%s_%s.csv",
 		sanitizeFilename(report.CategoryID),
 		sanitizeFilename(report.TemplateID),
-		time.Now().Format("20060102_150405"),
+		time.Now().In(reportHandlerLocationWIB).Format("20060102_150405"),
 	)
 	c.Header("Content-Description", "File Transfer")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
@@ -141,7 +144,7 @@ func (handler *ReportHandler) surveySatisfactionExport(c *gin.Context) {
 			report.Template,
 			response.TicketID,
 			response.UserID,
-			response.CreatedAt.Format(time.RFC3339),
+			response.CreatedAt.In(reportHandlerLocationWIB).Format(time.RFC3339),
 			fmt.Sprintf("%.2f", response.Score),
 		)
 		answers := make(map[string]interface{})
@@ -158,32 +161,32 @@ func (handler *ReportHandler) surveySatisfactionExport(c *gin.Context) {
 }
 
 func (handler *ReportHandler) templatesByCategory(c *gin.Context) {
-    categoryID := c.Query("categoryId")
-    templates, err := handler.reports.TemplatesByCategory(categoryID)
-    if err != nil {
-        respondError(c, http.StatusBadRequest, err.Error())
-        return
-    }
-    respondOK(c, templates)
+	categoryID := c.Query("categoryId")
+	templates, err := handler.reports.TemplatesByCategory(categoryID)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	respondOK(c, templates)
 }
 
 func (handler *ReportHandler) usageCohort(c *gin.Context) {
 	period, periods := parsePeriodParams(c, 5)
-    rows, err := handler.reports.UsageCohort(period, periods)
-    if err != nil {
-        respondError(c, http.StatusInternalServerError, err.Error())
-        return
-    }
-    respondOK(c, rows)
+	rows, err := handler.reports.UsageCohort(period, periods)
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondOK(c, rows)
 }
 
 func (handler *ReportHandler) entityService(c *gin.Context) {
 	period, periods := parsePeriodParams(c, 5)
-    rows, err := handler.reports.EntityServiceMatrix(period, periods)
-    if err != nil {
-        respondError(c, http.StatusInternalServerError, err.Error())
-        return
-    }
+	rows, err := handler.reports.EntityServiceMatrix(period, periods)
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
 	respondOK(c, rows)
 }
 
