@@ -47,8 +47,16 @@ func (handler *ReportHandler) dashboardSummary(c *gin.Context) {
 
 func (handler *ReportHandler) serviceTrends(c *gin.Context) {
 	now := time.Now().In(reportHandlerLocationWIB)
-	start := now.AddDate(0, 0, -30)
-	end := now.AddDate(0, 0, 1)
+	dayStart := time.Date(
+		now.Year(),
+		now.Month(),
+		now.Day(),
+		0, 0, 0, 0,
+		reportHandlerLocationWIB,
+	)
+	dayEnd := dayStart.AddDate(0, 0, 1)
+	start := dayStart.AddDate(0, 0, -29)
+	end := dayEnd
 	if rawStart := c.Query("start"); rawStart != "" {
 		if parsed, err := time.Parse(time.RFC3339, rawStart); err == nil {
 			start = parsed.In(reportHandlerLocationWIB)

@@ -135,19 +135,6 @@ func (repo *TicketRepository) ListFiltered(
 	return tickets, total, nil
 }
 
-func (repo *TicketRepository) CountForYear(year int) (int64, error) {
-	var count int64
-	start := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
-	end := time.Date(year+1, 1, 1, 0, 0, 0, 0, time.UTC)
-	if err := repo.db.Unscoped().
-		Model(&domain.Ticket{}).
-		Where("created_at >= ? AND created_at < ?", start, end).
-		Count(&count).Error; err != nil {
-		return 0, err
-	}
-	return count, nil
-}
-
 func (repo *TicketRepository) NextTicketSequence(year int) (int64, error) {
 	seqName := fmt.Sprintf("ticket_seq_%d", year)
 	createSQL := fmt.Sprintf(
