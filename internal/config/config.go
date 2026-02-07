@@ -12,6 +12,7 @@ type Config struct {
 	Environment           string
 	HTTPPort              string
 	BaseURL               string
+	TicketInitialStatus   string
 	JWTSecret             string
 	JWTExpiry             time.Duration
 	JWTExpiryUser         time.Duration
@@ -39,6 +40,7 @@ func Load() Config {
 		Environment:           envString("APP_ENV", ""),
 		HTTPPort:              envString("HTTP_PORT", ""),
 		BaseURL:               envString("BASE_URL", ""),
+		TicketInitialStatus:   envString("TICKET_INITIAL_STATUS", "resolved"),
 		JWTSecret:             envString("JWT_SECRET", ""),
 		JWTExpiry:             jwtExpiry,
 		JWTExpiryUser:         jwtExpiryUser,

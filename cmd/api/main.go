@@ -59,7 +59,15 @@ func main() {
 	authService := service.NewAuthService(cfg, userRepo, refreshTokenRepo)
 	categoryService := service.NewCategoryService(categoryRepo)
 	fcmClient := fcm.NewClient(cfg.FCMEnabled, cfg.FCMCredentials)
-	ticketService := service.NewTicketService(ticketRepo, categoryRepo, notificationRepo, tokenRepo, attachmentRepo, fcmClient)
+	ticketService := service.NewTicketService(
+		ticketRepo,
+		categoryRepo,
+		notificationRepo,
+		tokenRepo,
+		attachmentRepo,
+		fcmClient,
+		domain.TicketStatus(cfg.TicketInitialStatus),
+	)
 	surveyService := service.NewSurveyService(surveyRepo, ticketRepo)
 	notificationService := service.NewNotificationService(notificationRepo, tokenRepo)
 	reportService := service.NewReportService(reportRepo, categoryRepo, surveyRepo)

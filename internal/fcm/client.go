@@ -62,7 +62,9 @@ func (client *Client) SendToTokens(
 			Android: &messaging.AndroidConfig{
 				Priority: "high",
 				Notification: &messaging.AndroidNotification{
-					ChannelID: "helpdesk_updates",
+					ChannelID:    "helpdesk_updates",
+					Priority:     messaging.PriorityMax,
+					DefaultSound: true,
 				},
 			},
 			APNS: &messaging.APNSConfig{

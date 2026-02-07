@@ -81,6 +81,7 @@ type SurveyTemplateDTO struct {
 
 type NotificationDTO struct {
 	ID        string    `json:"id"`
+	TicketID  string    `json:"ticketId,omitempty"`
 	Title     string    `json:"title"`
 	Message   string    `json:"message"`
 	Timestamp time.Time `json:"timestamp"`

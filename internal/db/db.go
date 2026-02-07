@@ -145,6 +145,15 @@ func AutoMigrate(database *gorm.DB) error {
 		return err
 	}
 
+	// Normalize legacy "processing" status into the active status set.
+	if err := database.Exec(`
+        UPDATE tickets
+        SET status = 'inProgress'
+        WHERE status = 'processing'
+    `).Error; err != nil {
+		return err
+	}
+
 	// Keep only the newest row for each FCM token to prevent cross-account delivery
 	// on shared devices with historical duplicate mappings.
 	if err := database.Exec(`
