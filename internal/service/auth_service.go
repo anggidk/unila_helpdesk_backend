@@ -111,10 +111,6 @@ func (service *AuthService) IssueToken(user domain.User) (AuthResult, error) {
     }, nil
 }
 
-func (service *AuthService) LoginWithPassword(username string, password string) (AuthResult, error) {
-    return service.LoginWithPasswordClient(username, password, "")
-}
-
 func (service *AuthService) LoginWithPasswordClient(username string, password string, clientType string) (AuthResult, error) {
     cleanedUser := strings.ToLower(strings.TrimSpace(username))
     cleanedPass := strings.TrimSpace(password)
@@ -141,10 +137,6 @@ func (service *AuthService) LoginWithPasswordClient(username string, password st
         return AuthResult{}, err
     }
     return service.IssueToken(*user)
-}
-
-func (service *AuthService) RefreshWithToken(refreshToken string) (AuthResult, error) {
-    return service.RefreshWithTokenClient(refreshToken, "")
 }
 
 func (service *AuthService) RefreshWithTokenClient(refreshToken string, clientType string) (AuthResult, error) {

@@ -3,9 +3,7 @@ package service
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,12 +14,23 @@ import (
 )
 
 type ReportService struct {
-	reports *repository.ReportRepository
-	now     func() time.Time
+	reports    *repository.ReportRepository
+	categories *repository.CategoryRepository
+	surveys    *repository.SurveyRepository
+	now        func() time.Time
 }
 
-func NewReportService(reports *repository.ReportRepository) *ReportService {
-	return &ReportService{reports: reports, now: time.Now}
+func NewReportService(
+	reports *repository.ReportRepository,
+	categories *repository.CategoryRepository,
+	surveys *repository.SurveyRepository,
+) *ReportService {
+	return &ReportService{
+		reports:    reports,
+		categories: categories,
+		surveys:    surveys,
+		now:        time.Now,
+	}
 }
 
 func (service *ReportService) CohortReport(period string, periods int) ([]domain.CohortRowDTO, error) {
@@ -181,78 +190,6 @@ func calculateCohortScores(responses []domain.SurveyResponse) (float64, float64)
 	return avg, responseRate
 }
 
-func answerKey(value interface{}, questionType domain.SurveyQuestionType) (string, bool) {
-	switch questionType {
-	case domain.QuestionYesNo:
-		switch v := value.(type) {
-		case bool:
-			if v {
-				return "Ya", true
-			}
-			return "Tidak", true
-		case string:
-			cleaned := strings.ToLower(strings.TrimSpace(v))
-			if cleaned == "ya" || cleaned == "yes" || cleaned == "true" {
-				return "Ya", true
-			}
-			if cleaned == "tidak" || cleaned == "no" || cleaned == "false" {
-				return "Tidak", true
-			}
-		}
-		return "", false
-	case domain.QuestionMultipleChoice:
-		choice := strings.TrimSpace(fmt.Sprintf("%v", value))
-		if choice == "" {
-			return "", false
-		}
-		return choice, true
-	case domain.QuestionText:
-		return "", false
-	default:
-		max := scaleMaxFor(questionType)
-		if max <= 0 {
-			return "", false
-		}
-		if numeric, ok := parseNumericValue(value); ok {
-			if numeric >= 1 && numeric <= float64(max) {
-				return strconv.Itoa(int(numeric)), true
-			}
-		}
-	}
-	return "", false
-}
-
-func scaleMaxFor(questionType domain.SurveyQuestionType) int {
-	switch questionType {
-	case domain.QuestionLikert3, domain.QuestionLikert3Puas:
-		return 3
-	case domain.QuestionLikert4, domain.QuestionLikert4Puas:
-		return 4
-	case domain.QuestionLikert, domain.QuestionLikertQuality:
-		return 5
-	default:
-		return 0
-	}
-}
-
-func parseNumericValue(value interface{}) (float64, bool) {
-	switch v := value.(type) {
-	case float64:
-		return v, true
-	case int:
-		return float64(v), true
-	case string:
-		cleaned := strings.TrimSpace(v)
-		parsed, err := strconv.ParseFloat(cleaned, 64)
-		if err != nil {
-			return 0, false
-		}
-		return parsed, true
-	default:
-		return 0, false
-	}
-}
-
 func (service *ReportService) ServiceTrends(start time.Time, end time.Time) ([]domain.ServiceTrendDTO, error) {
 	rows, err := service.reports.ListTicketTotalsByCategory(start, end)
 	if err != nil {
@@ -267,13 +204,7 @@ func (service *ReportService) ServiceTrends(start time.Time, end time.Time) ([]d
 		return []domain.ServiceTrendDTO{}, nil
 	}
 
-	categories := make(map[string]string)
-	categoryRows, err := service.reports.ListCategories()
-	if err == nil {
-		for _, cat := range categoryRows {
-			categories[cat.ID] = cat.Name
-		}
-	}
+	categories := service.categoryNameMap()
 
 	trends := make([]domain.ServiceTrendDTO, 0, len(rows))
 	for _, item := range rows {
@@ -284,7 +215,6 @@ func (service *ReportService) ServiceTrends(start time.Time, end time.Time) ([]d
 		trends = append(trends, domain.ServiceTrendDTO{
 			Label:      label,
 			Percentage: float64(item.Total) / float64(overall) * 100,
-			Note:       "",
 		})
 	}
 
@@ -335,13 +265,7 @@ func (service *ReportService) ServiceSatisfactionSummary(period string, periods 
 		return nil, err
 	}
 
-	categories := make(map[string]string)
-	categoryRows, err := service.reports.ListCategories()
-	if err == nil {
-		for _, cat := range categoryRows {
-			categories[cat.ID] = cat.Name
-		}
-	}
+	categories := service.categoryNameMap()
 
 	totalWeighted := 0.0
 	for _, row := range rows {
@@ -382,26 +306,9 @@ func (service *ReportService) SurveySatisfaction(
 		return nil, gorm.ErrRecordNotFound
 	}
 
-	var template *domain.SurveyTemplate
-	if templateID != "" {
-		found, err := service.reports.FindTemplateWithQuestions(templateID)
-		if err != nil {
-			return nil, err
-		}
-		template = found
-	} else {
-		category, err := service.reports.FindCategoryByID(categoryID)
-		if err != nil {
-			return nil, err
-		}
-		if category.SurveyTemplateID == "" {
-			return nil, gorm.ErrRecordNotFound
-		}
-		found, err := service.reports.FindTemplateWithQuestions(category.SurveyTemplateID)
-		if err != nil {
-			return nil, err
-		}
-		template = found
+	template, err := service.resolveTemplate(categoryID, templateID, false)
+	if err != nil {
+		return nil, err
 	}
 
 	start, end := periodRange(period, periods, service.now)
@@ -454,16 +361,9 @@ func (service *ReportService) SurveySatisfaction(
 		})
 	}
 
-	categoryName := categoryID
-	if categoryID == "" {
-		categoryName = "Semua Kategori"
-	} else {
-		category, err := service.reports.FindCategoryByID(categoryID)
-		if err == nil {
-			if category.Name != "" {
-				categoryName = category.Name
-			}
-		}
+	categoryName := "Semua Kategori"
+	if categoryID != "" {
+		categoryName = service.resolveCategoryName(categoryID)
 	}
 
 	report := &domain.SurveySatisfactionDTO{
@@ -489,26 +389,9 @@ func (service *ReportService) SurveySatisfactionExport(
 		return nil, errors.New("categoryId wajib diisi")
 	}
 
-	var template *domain.SurveyTemplate
-	if templateID != "" {
-		found, err := service.reports.FindTemplateWithOrderedQuestions(templateID)
-		if err != nil {
-			return nil, err
-		}
-		template = found
-	} else {
-		category, err := service.reports.FindCategoryByID(categoryID)
-		if err != nil {
-			return nil, err
-		}
-		if category.SurveyTemplateID == "" {
-			return nil, gorm.ErrRecordNotFound
-		}
-		found, err := service.reports.FindTemplateWithOrderedQuestions(category.SurveyTemplateID)
-		if err != nil {
-			return nil, err
-		}
-		template = found
+	template, err := service.resolveTemplate(categoryID, templateID, true)
+	if err != nil {
+		return nil, err
 	}
 
 	start, end := periodRange(period, periods, service.now)
@@ -545,13 +428,7 @@ func (service *ReportService) SurveySatisfactionExport(
 		})
 	}
 
-	categoryName := categoryID
-	category, err := service.reports.FindCategoryByID(categoryID)
-	if err == nil {
-		if category.Name != "" {
-			categoryName = category.Name
-		}
-	}
+	categoryName := service.resolveCategoryName(categoryID)
 
 	report := &domain.SurveySatisfactionExportDTO{
 		TemplateID: template.ID,
@@ -572,7 +449,7 @@ func (service *ReportService) TemplatesByCategory(categoryID string) ([]domain.S
 		return nil, errors.New("categoryId wajib diisi")
 	}
 
-	category, err := service.reports.FindCategoryByID(categoryID)
+	category, err := service.categories.FindByID(categoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -616,7 +493,7 @@ func (service *ReportService) TemplatesByCategory(categoryID string) ([]domain.S
 		return templates[i].UpdatedAt.After(templates[j].UpdatedAt)
 	})
 
-	return mapSurveyTemplateDTOs(templates), nil
+	return mapSurveyTemplates(templates), nil
 }
 
 func (service *ReportService) UsageCohort(period string, periods int) ([]domain.UsageCohortRowDTO, error) {
@@ -716,25 +593,7 @@ func (service *ReportService) EntityServiceMatrix(period string, periods int) ([
 }
 
 func (service *ReportService) listRegisteredCategories() ([]domain.ServiceCategory, error) {
-	categories, err := service.reports.ListRegisteredCategories()
-	if err != nil {
-		return nil, err
-	}
-	hidden := map[string]struct{}{
-		"membership":    {},
-		"guest-account": {},
-		"guest-email":   {},
-		"email":         {},
-		"vclass":        {},
-	}
-	filtered := make([]domain.ServiceCategory, 0, len(categories))
-	for _, cat := range categories {
-		if _, skip := hidden[cat.ID]; skip {
-			continue
-		}
-		filtered = append(filtered, cat)
-	}
-	return filtered, nil
+	return service.reports.ListRegisteredCategories()
 }
 
 func periodRange(period string, periods int, nowFn func() time.Time) (time.Time, time.Time) {
@@ -748,34 +607,44 @@ func periodRange(period string, periods int, nowFn func() time.Time) (time.Time,
 	return start, end
 }
 
-func mapSurveyTemplateDTOs(templates []domain.SurveyTemplate) []domain.SurveyTemplateDTO {
-	result := make([]domain.SurveyTemplateDTO, 0, len(templates))
-	for _, template := range templates {
-		result = append(result, mapSurveyTemplateDTO(template))
+func (service *ReportService) resolveTemplate(
+	categoryID string,
+	templateID string,
+	withOrdering bool,
+) (*domain.SurveyTemplate, error) {
+	selectedTemplateID := strings.TrimSpace(templateID)
+	if selectedTemplateID == "" {
+		category, err := service.categories.FindByID(categoryID)
+		if err != nil {
+			return nil, err
+		}
+		if category.SurveyTemplateID == "" {
+			return nil, gorm.ErrRecordNotFound
+		}
+		selectedTemplateID = category.SurveyTemplateID
 	}
-	return result
+
+	if withOrdering {
+		return service.reports.FindTemplateWithOrderedQuestions(selectedTemplateID)
+	}
+	return service.surveys.FindByID(selectedTemplateID)
 }
 
-func mapSurveyTemplateDTO(template domain.SurveyTemplate) domain.SurveyTemplateDTO {
-	questions := make([]domain.SurveyQuestionDTO, 0, len(template.Questions))
-	for _, question := range template.Questions {
-		var options []string
-		_ = json.Unmarshal(question.Options, &options)
-		questions = append(questions, domain.SurveyQuestionDTO{
-			ID:      question.ID,
-			Text:    question.Text,
-			Type:    string(question.Type),
-			Options: options,
-		})
+func (service *ReportService) categoryNameMap() map[string]string {
+	categories := make(map[string]string)
+	categoryRows, err := service.categories.List()
+	if err == nil {
+		for _, cat := range categoryRows {
+			categories[cat.ID] = cat.Name
+		}
 	}
-	return domain.SurveyTemplateDTO{
-		ID:          template.ID,
-		Title:       template.Title,
-		Description: template.Description,
-		Framework:   template.Framework,
-		CategoryID:  template.CategoryID,
-		Questions:   questions,
-		CreatedAt:   template.CreatedAt,
-		UpdatedAt:   template.UpdatedAt,
+	return categories
+}
+
+func (service *ReportService) resolveCategoryName(categoryID string) string {
+	category, err := service.categories.FindByID(categoryID)
+	if err == nil && category.Name != "" {
+		return category.Name
 	}
+	return categoryID
 }

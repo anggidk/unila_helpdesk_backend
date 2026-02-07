@@ -71,14 +71,6 @@ func (repo *ReportRepository) ListTicketTotalsByCategory(start time.Time, end ti
 	return rows, nil
 }
 
-func (repo *ReportRepository) ListCategories() ([]domain.ServiceCategory, error) {
-	var categories []domain.ServiceCategory
-	if err := repo.db.Find(&categories).Error; err != nil {
-		return nil, err
-	}
-	return categories, nil
-}
-
 func (repo *ReportRepository) CountTickets() (int64, error) {
 	var total int64
 	if err := repo.db.Model(&domain.Ticket{}).Count(&total).Error; err != nil {
@@ -134,22 +126,6 @@ func (repo *ReportRepository) ListServiceSatisfactionRows(start time.Time, end t
 		return nil, err
 	}
 	return rows, nil
-}
-
-func (repo *ReportRepository) FindCategoryByID(categoryID string) (*domain.ServiceCategory, error) {
-	var category domain.ServiceCategory
-	if err := repo.db.First(&category, "id = ?", categoryID).Error; err != nil {
-		return nil, err
-	}
-	return &category, nil
-}
-
-func (repo *ReportRepository) FindTemplateWithQuestions(templateID string) (*domain.SurveyTemplate, error) {
-	var template domain.SurveyTemplate
-	if err := repo.db.Preload("Questions").First(&template, "id = ?", templateID).Error; err != nil {
-		return nil, err
-	}
-	return &template, nil
 }
 
 func (repo *ReportRepository) FindTemplateWithOrderedQuestions(templateID string) (*domain.SurveyTemplate, error) {

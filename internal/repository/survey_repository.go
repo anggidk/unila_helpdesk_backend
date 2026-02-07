@@ -75,10 +75,6 @@ func (repo *SurveyRepository) CreateTemplate(template *domain.SurveyTemplate) er
     return repo.db.Create(template).Error
 }
 
-func (repo *SurveyRepository) UpdateTemplate(template *domain.SurveyTemplate) error {
-    return repo.db.Session(&gorm.Session{FullSaveAssociations: true}).Updates(template).Error
-}
-
 func (repo *SurveyRepository) ReplaceTemplate(template *domain.SurveyTemplate) error {
     return repo.db.Transaction(func(tx *gorm.DB) error {
         updates := map[string]any{

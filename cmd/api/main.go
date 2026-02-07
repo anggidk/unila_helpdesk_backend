@@ -52,6 +52,9 @@ func main() {
 	for _, category := range service.DefaultCategories() {
 		_ = categoryRepo.Upsert(category)
 	}
+	if err := service.CleanupDeprecatedCategories(database, service.CategoryLainnya); err != nil {
+		log.Fatalf("cleanup deprecated categories failed: %v", err)
+	}
 
 	authService := service.NewAuthService(cfg, userRepo, refreshTokenRepo)
 	categoryService := service.NewCategoryService(categoryRepo)
@@ -59,7 +62,7 @@ func main() {
 	ticketService := service.NewTicketService(ticketRepo, categoryRepo, notificationRepo, tokenRepo, attachmentRepo, fcmClient)
 	surveyService := service.NewSurveyService(surveyRepo, ticketRepo)
 	notificationService := service.NewNotificationService(notificationRepo, tokenRepo)
-	reportService := service.NewReportService(reportRepo)
+	reportService := service.NewReportService(reportRepo, categoryRepo, surveyRepo)
 
 	authHandler := handler.NewAuthHandler(authService)
 	categoryHandler := handler.NewCategoryHandler(categoryService)

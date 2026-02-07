@@ -32,12 +32,20 @@ func NewClient(enabled bool, credentialsPath string) *Client {
     return &Client{enabled: true, sender: sender}
 }
 
-func (client *Client) SendToTokens(ctx context.Context, tokens []string, title string, body string, data map[string]string) error {
+func (client *Client) SendToTokens(
+    ctx context.Context,
+    tokens []string,
+    title string,
+    body string,
+    data map[string]string,
+) ([]string, error) {
     if !client.enabled || client.sender == nil || len(tokens) == 0 {
-        return nil
+        return nil, nil
     }
     successCount := 0
     failureCount := 0
+    invalidCount := 0
+    invalidTokens := make([]string, 0)
     var lastErr error
 
     for index, token := range tokens {
@@ -53,18 +61,34 @@ func (client *Client) SendToTokens(ctx context.Context, tokens []string, title s
             Data: data,
         }
         if _, err := client.sender.Send(ctx, message); err != nil {
-            failureCount++
-            lastErr = err
             tokenHint := token
             if len(tokenHint) > 10 {
                 tokenHint = tokenHint[:10] + "..."
             }
+            if isInvalidTokenError(err) {
+                invalidCount++
+                invalidTokens = append(invalidTokens, token)
+                log.Printf("fcm invalid token[%d]=%s: %v", index, tokenHint, err)
+                continue
+            }
+            failureCount++
+            lastErr = err
             log.Printf("fcm send failed token[%d]=%s: %v", index, tokenHint, err)
             continue
         }
         successCount++
     }
 
-    log.Printf("fcm sent: success=%d failure=%d", successCount, failureCount)
-    return lastErr
+    log.Printf("fcm sent: success=%d invalid=%d failure=%d", successCount, invalidCount, failureCount)
+    return invalidTokens, lastErr
+}
+
+func isInvalidTokenError(err error) bool {
+    if err == nil {
+        return false
+    }
+    message := strings.ToLower(err.Error())
+    return strings.Contains(message, "requested entity was not found") ||
+        strings.Contains(message, "registration-token-not-registered") ||
+        strings.Contains(message, "unregistered")
 }

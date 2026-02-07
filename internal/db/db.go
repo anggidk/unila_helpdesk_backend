@@ -1,84 +1,84 @@
 package db
 
 import (
-    "fmt"
-    "log"
-    "net/url"
-    "strings"
-    "time"
+	"fmt"
+	"log"
+	"net/url"
+	"strings"
+	"time"
 
-    "unila_helpdesk_backend/internal/config"
-    "unila_helpdesk_backend/internal/domain"
+	"unila_helpdesk_backend/internal/config"
+	"unila_helpdesk_backend/internal/domain"
 
-    "gorm.io/driver/postgres"
-    "gorm.io/gorm"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 func Connect(cfg config.Config) (*gorm.DB, error) {
-    database, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{})
-    if err != nil {
-        return nil, err
-    }
+	database, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
 
-    sqlDB, err := database.DB()
-    if err != nil {
-        return nil, err
-    }
+	sqlDB, err := database.DB()
+	if err != nil {
+		return nil, err
+	}
 
-    sqlDB.SetMaxOpenConns(cfg.DatabaseMaxConns)
-    sqlDB.SetMaxIdleConns(cfg.DatabaseIdleConns)
-    sqlDB.SetConnMaxLifetime(30 * time.Minute)
+	sqlDB.SetMaxOpenConns(cfg.DatabaseMaxConns)
+	sqlDB.SetMaxIdleConns(cfg.DatabaseIdleConns)
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
 
-    return database, nil
+	return database, nil
 }
 
 func EnsureDatabase(cfg config.Config) error {
-    parsed, err := url.Parse(cfg.DatabaseURL)
-    if err != nil {
-        return fmt.Errorf("invalid DATABASE_URL: %w", err)
-    }
-    dbName := strings.TrimPrefix(parsed.Path, "/")
-    if dbName == "" {
-        return fmt.Errorf("DATABASE_URL missing database name")
-    }
+	parsed, err := url.Parse(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("invalid DATABASE_URL: %w", err)
+	}
+	dbName := strings.TrimPrefix(parsed.Path, "/")
+	if dbName == "" {
+		return fmt.Errorf("DATABASE_URL missing database name")
+	}
 
-    adminURL := *parsed
-    adminURL.Path = "/postgres"
-    adminDB, err := gorm.Open(postgres.Open(adminURL.String()), &gorm.Config{})
-    if err != nil {
-        return fmt.Errorf("failed to connect admin db: %w", err)
-    }
-    sqlDB, err := adminDB.DB()
-    if err == nil {
-        defer sqlDB.Close()
-    }
+	adminURL := *parsed
+	adminURL.Path = "/postgres"
+	adminDB, err := gorm.Open(postgres.Open(adminURL.String()), &gorm.Config{})
+	if err != nil {
+		return fmt.Errorf("failed to connect admin db: %w", err)
+	}
+	sqlDB, err := adminDB.DB()
+	if err == nil {
+		defer sqlDB.Close()
+	}
 
-    var exists bool
-    if err := adminDB.Raw(
-        "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = ?)",
-        dbName,
-    ).Scan(&exists).Error; err != nil {
-        return fmt.Errorf("failed to check database: %w", err)
-    }
-    if exists {
-        return nil
-    }
+	var exists bool
+	if err := adminDB.Raw(
+		"SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = ?)",
+		dbName,
+	).Scan(&exists).Error; err != nil {
+		return fmt.Errorf("failed to check database: %w", err)
+	}
+	if exists {
+		return nil
+	}
 
-    if err := adminDB.Exec(
-        fmt.Sprintf("CREATE DATABASE %s", quoteIdentifier(dbName)),
-    ).Error; err != nil {
-        return fmt.Errorf("failed to create database: %w", err)
-    }
-    return nil
+	if err := adminDB.Exec(
+		fmt.Sprintf("CREATE DATABASE %s", quoteIdentifier(dbName)),
+	).Error; err != nil {
+		return fmt.Errorf("failed to create database: %w", err)
+	}
+	return nil
 }
 
 func quoteIdentifier(value string) string {
-    return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
+	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
 }
 
 func AutoMigrate(database *gorm.DB) error {
-    // Normalize legacy schema to avoid type-mismatch errors before AutoMigrate.
-    _ = database.Exec(`
+	// Normalize legacy schema to avoid type-mismatch errors before AutoMigrate.
+	_ = database.Exec(`
         DO $$
         BEGIN
             IF to_regclass('public.tickets') IS NOT NULL THEN
@@ -114,25 +114,25 @@ func AutoMigrate(database *gorm.DB) error {
             END IF;
         END $$;
     `).Error
-    if err := database.AutoMigrate(
-        &domain.User{},
-        &domain.ServiceCategory{},
-        &domain.Ticket{},
-        &domain.Attachment{},
-        &domain.TicketHistory{},
-        &domain.TicketComment{},
-        &domain.SurveyTemplate{},
-        &domain.SurveyQuestion{},
-        &domain.SurveyResponse{},
-        &domain.Notification{},
-        &domain.FCMToken{},
-        &domain.RefreshToken{},
-    ); err != nil {
-        return err
-    }
+	if err := database.AutoMigrate(
+		&domain.User{},
+		&domain.ServiceCategory{},
+		&domain.Ticket{},
+		&domain.Attachment{},
+		&domain.TicketHistory{},
+		&domain.TicketComment{},
+		&domain.SurveyTemplate{},
+		&domain.SurveyQuestion{},
+		&domain.SurveyResponse{},
+		&domain.Notification{},
+		&domain.FCMToken{},
+		&domain.RefreshToken{},
+	); err != nil {
+		return err
+	}
 
-    // Backfill template_id for legacy survey responses (before template_id existed).
-    if err := database.Exec(`
+	// Backfill template_id for legacy survey responses (before template_id existed).
+	if err := database.Exec(`
         UPDATE survey_responses sr
         SET template_id = sc.survey_template_id
         FROM tickets t
@@ -142,14 +142,26 @@ func AutoMigrate(database *gorm.DB) error {
           AND sc.survey_template_id IS NOT NULL
           AND sc.survey_template_id <> ''
     `).Error; err != nil {
-        return err
-    }
+		return err
+	}
 
-    return nil
+	// Keep only the newest row for each FCM token to prevent cross-account delivery
+	// on shared devices with historical duplicate mappings.
+	if err := database.Exec(`
+        DELETE FROM fcm_tokens stale
+        USING fcm_tokens fresh
+        WHERE stale.token = fresh.token
+          AND stale.id <> fresh.id
+          AND (stale.updated_at, stale.id) < (fresh.updated_at, fresh.id)
+    `).Error; err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func MustAutoMigrate(database *gorm.DB) {
-    if err := AutoMigrate(database); err != nil {
-        log.Fatalf("auto migrate failed: %v", err)
-    }
+	if err := AutoMigrate(database); err != nil {
+		log.Fatalf("auto migrate failed: %v", err)
+	}
 }

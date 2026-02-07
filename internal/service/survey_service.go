@@ -245,10 +245,7 @@ func (service *SurveyService) ListResponsesPaged(
 			CreatedAt:  row.CreatedAt,
 		})
 	}
-	totalPages := 0
-	if limit > 0 {
-		totalPages = int((total + int64(limit) - 1) / int64(limit))
-	}
+	totalPages := util.CalcTotalPages(total, limit)
 	return domain.SurveyResponsePageDTO{
 		Items:      items,
 		Page:       page,
