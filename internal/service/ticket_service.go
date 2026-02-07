@@ -102,7 +102,7 @@ func (service *TicketService) createTicketCore(params ticketCoreParams) (domain.
 	}
 
 	if params.isGuest && !category.GuestAllowed {
-		return domain.Ticket{}, nil, errors.New("guest hanya dapat membuat tiket keanggotaan")
+		return domain.Ticket{}, nil, errors.New("guest hanya dapat membuat tiket kategori guest")
 	}
 
 	priority := params.priority
@@ -233,7 +233,7 @@ func (service *TicketService) UpdateTicket(ctx context.Context, user domain.User
 			return domain.TicketDTO{}, err
 		}
 		if user.Role == domain.RoleGuest && !category.GuestAllowed {
-			return domain.TicketDTO{}, errors.New("guest hanya dapat membuat tiket keanggotaan")
+			return domain.TicketDTO{}, errors.New("guest hanya dapat membuat tiket kategori guest")
 		}
 		ticket.CategoryID = category.ID
 		ticket.Category = *category

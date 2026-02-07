@@ -16,6 +16,7 @@ const (
 	CategoryLainnya             = "lainnya"
 	CategoryGuestPassword       = "guest-password"
 	CategoryGuestSSORegistration = "guest-sso"
+	CategoryGuestEmailRegistration = "guest-email-unila"
 )
 
 func DefaultCategories() []domain.ServiceCategory {
@@ -27,6 +28,7 @@ func DefaultCategories() []domain.ServiceCategory {
 		{ID: CategoryLainnya, Name: "Lainnya", GuestAllowed: false},
 		{ID: CategoryGuestPassword, Name: "Lupa Password SSO", GuestAllowed: true},
 		{ID: CategoryGuestSSORegistration, Name: "Registrasi SSO", GuestAllowed: true},
+		{ID: CategoryGuestEmailRegistration, Name: "Registrasi Email @unila.ac.id", GuestAllowed: true},
 	}
 }
 
