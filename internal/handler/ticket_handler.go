@@ -101,7 +101,8 @@ func parseTicketStatus(raw string) (domain.TicketStatus, error) {
 	case string(domain.StatusWaiting):
 		return domain.StatusWaiting, nil
 	case string(domain.StatusProcessing):
-		return domain.StatusProcessing, nil
+		// Backward compatibility for legacy clients/status values.
+		return domain.StatusInProgress, nil
 	case string(domain.StatusInProgress):
 		return domain.StatusInProgress, nil
 	case string(domain.StatusResolved):
