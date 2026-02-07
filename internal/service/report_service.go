@@ -227,7 +227,10 @@ func (service *ReportService) DashboardSummary() (domain.DashboardSummaryDTO, er
 		return domain.DashboardSummaryDTO{}, err
 	}
 
-	openTickets, err := service.reports.CountOpenTickets(domain.StatusResolved)
+	openTickets, err := service.reports.CountOpenTickets([]domain.TicketStatus{
+		domain.StatusWaiting,
+		domain.StatusInProgress,
+	})
 	if err != nil {
 		return domain.DashboardSummaryDTO{}, err
 	}

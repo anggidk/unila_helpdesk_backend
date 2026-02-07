@@ -79,10 +79,13 @@ func (repo *ReportRepository) CountTickets() (int64, error) {
 	return total, nil
 }
 
-func (repo *ReportRepository) CountOpenTickets(resolvedStatus domain.TicketStatus) (int64, error) {
+func (repo *ReportRepository) CountOpenTickets(statuses []domain.TicketStatus) (int64, error) {
 	var total int64
+	if len(statuses) == 0 {
+		return 0, nil
+	}
 	if err := repo.db.Model(&domain.Ticket{}).
-		Where("status != ?", resolvedStatus).
+		Where("status IN ?", statuses).
 		Count(&total).Error; err != nil {
 		return 0, err
 	}
