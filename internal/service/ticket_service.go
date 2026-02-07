@@ -24,6 +24,7 @@ type TicketService struct {
 	tokens        *repository.FCMTokenRepository
 	attachments   *repository.AttachmentRepository
 	fcmClient     *fcm.Client
+	initialStatus domain.TicketStatus
 	now           func() time.Time
 }
 
@@ -60,6 +61,7 @@ func NewTicketService(
 	tokens *repository.FCMTokenRepository,
 	attachments *repository.AttachmentRepository,
 	fcmClient *fcm.Client,
+	initialStatus domain.TicketStatus,
 ) *TicketService {
 	return &TicketService{
 		tickets:       tickets,
@@ -68,6 +70,7 @@ func NewTicketService(
 		tokens:        tokens,
 		attachments:   attachments,
 		fcmClient:     fcmClient,
+		initialStatus: normalizeInitialTicketStatus(initialStatus),
 		now:           time.Now,
 	}
 }
@@ -81,7 +84,7 @@ type ticketCoreParams struct {
 	reporterID     string
 	reporterName   string
 	isGuest        bool
-	surveyRequired bool
+	surveyEligible bool
 	historyNote    string
 }
 
@@ -107,38 +110,45 @@ func (service *TicketService) createTicketCore(params ticketCoreParams) (domain.
 		priority = domain.PriorityMedium
 	}
 
-	ticketID, err := service.generateTicketID()
-	if err != nil {
-		return domain.Ticket{}, nil, err
+	const maxCreateRetries = 5
+	for attempt := 0; attempt < maxCreateRetries; attempt++ {
+		ticketID, err := service.generateTicketID()
+		if err != nil {
+			return domain.Ticket{}, nil, err
+		}
+
+		ticket := domain.Ticket{
+			ID:             ticketID,
+			Title:          strings.TrimSpace(params.title),
+			Description:    strings.TrimSpace(params.description),
+			CategoryID:     category.ID,
+			Priority:       priority,
+			Status:         service.initialStatus,
+			ReporterID:     params.reporterID,
+			ReporterName:   params.reporterName,
+			IsGuest:        params.isGuest,
+			SurveyRequired: params.surveyEligible && !params.isGuest && service.initialStatus == domain.StatusResolved,
+			CreatedAt:      service.now(),
+			UpdatedAt:      service.now(),
+		}
+		if payload := marshalAttachments(params.attachments); payload != nil {
+			ticket.Attachments = payload
+		}
+
+		if err := service.tickets.Create(&ticket); err != nil {
+			if isDuplicateTicketIDError(err) {
+				continue
+			}
+			return domain.Ticket{}, nil, err
+		}
+
+		_ = service.attachments.AttachToTicket(attachmentIDsFromRefs(params.attachments), ticket.ID)
+		_ = service.addHistory(ticket.ID, "Ticket Created", params.historyNote)
+		_ = service.addHistory(ticket.ID, "Status Updated", fmt.Sprintf("Status diperbarui ke %s", ticket.Status))
+		return ticket, category, nil
 	}
 
-	ticket := domain.Ticket{
-		ID:             ticketID,
-		Title:          strings.TrimSpace(params.title),
-		Description:    strings.TrimSpace(params.description),
-		CategoryID:     category.ID,
-		Priority:       priority,
-		Status:         domain.StatusResolved,
-		ReporterID:     params.reporterID,
-		ReporterName:   params.reporterName,
-		IsGuest:        params.isGuest,
-		SurveyRequired: params.surveyRequired,
-		CreatedAt:      service.now(),
-		UpdatedAt:      service.now(),
-	}
-	if payload := marshalAttachments(params.attachments); payload != nil {
-		ticket.Attachments = payload
-	}
-
-	if err := service.tickets.Create(&ticket); err != nil {
-		return domain.Ticket{}, nil, err
-	}
-	_ = service.attachments.AttachToTicket(attachmentIDsFromRefs(params.attachments), ticket.ID)
-
-	_ = service.addHistory(ticket.ID, "Ticket Created", params.historyNote)
-	_ = service.addHistory(ticket.ID, "Status Updated", fmt.Sprintf("Status diperbarui ke %s", ticket.Status))
-
-	return ticket, category, nil
+	return domain.Ticket{}, nil, errors.New("gagal membuat nomor tiket unik, silakan coba lagi")
 }
 
 func (service *TicketService) CreateTicket(ctx context.Context, user domain.User, req TicketCreateRequest) (domain.TicketDTO, error) {
@@ -151,21 +161,21 @@ func (service *TicketService) CreateTicket(ctx context.Context, user domain.User
 		reporterID:     user.ID,
 		reporterName:   user.Name,
 		isGuest:        user.Role == domain.RoleGuest,
-		surveyRequired: user.Role == domain.RoleRegistered,
+		surveyEligible: user.Role == domain.RoleRegistered,
 		historyNote:    "Dilaporkan oleh pengguna",
 	})
 	if err != nil {
 		return domain.TicketDTO{}, err
 	}
 
-	if ticket.Status == domain.StatusResolved && ticket.SurveyRequired {
+	if !ticket.IsGuest {
 		if err := service.notifyTicketStatus(
 			ctx,
 			ticket,
-			"Tiket Selesai Ditangani",
-			fmt.Sprintf("Tiket %s selesai ditangani. Mohon isi feedback.", ticket.ID),
+			"Tiket Berhasil Dibuat",
+			fmt.Sprintf("Tiket %s berhasil dibuat dengan status %s.", ticket.ID, statusLabel(ticket.Status)),
 		); err != nil {
-			log.Printf("failed to send survey notification: %v", err)
+			log.Printf("failed to send create notification: %v", err)
 		}
 	}
 
@@ -179,16 +189,15 @@ func (service *TicketService) CreateGuestTicket(ctx context.Context, req GuestTi
 	}
 
 	ticket, category, err := service.createTicketCore(ticketCoreParams{
-		title:          req.Title,
-		description:    req.Description,
-		category:       req.Category,
-		priority:       req.Priority,
-		attachments:    req.Attachments,
-		reporterID:     "",
-		reporterName:   reporterName,
-		isGuest:        true,
-		surveyRequired: false,
-		historyNote:    "Dilaporkan oleh guest",
+		title:        req.Title,
+		description:  req.Description,
+		category:     req.Category,
+		priority:     req.Priority,
+		attachments:  req.Attachments,
+		reporterID:   "",
+		reporterName: reporterName,
+		isGuest:      true,
+		historyNote:  "Dilaporkan oleh guest",
 	})
 	if err != nil {
 		return domain.TicketDTO{}, err
@@ -234,6 +243,7 @@ func (service *TicketService) UpdateTicket(ctx context.Context, user domain.User
 	}
 
 	statusChanged := false
+	previousStatus := ticket.Status
 	historyTitle := "Ticket Updated"
 	historyDesc := "Perubahan tiket diperbarui"
 
@@ -250,7 +260,7 @@ func (service *TicketService) UpdateTicket(ctx context.Context, user domain.User
 
 	if statusChanged {
 		historyTitle = "Status Updated"
-		historyDesc = fmt.Sprintf("Status diperbarui ke %s", ticket.Status)
+		historyDesc = fmt.Sprintf("Status diperbarui dari %s ke %s", statusLabel(previousStatus), statusLabel(ticket.Status))
 	}
 
 	ticket.UpdatedAt = service.now()
@@ -268,15 +278,9 @@ func (service *TicketService) UpdateTicket(ctx context.Context, user domain.User
 		if err := service.tickets.UpdateStatus(ticket.ID, ticket.Status, surveyRequired); err != nil {
 			log.Printf("failed to update status: %v", err)
 		}
-		if surveyRequired {
-			if err := service.notifyTicketStatus(
-				ctx,
-				*ticket,
-				"Tiket Selesai Ditangani",
-				fmt.Sprintf("Tiket %s selesai ditangani. Mohon isi feedback.", ticket.ID),
-			); err != nil {
-				log.Printf("failed to send survey notification: %v", err)
-			}
+		title, message := statusChangeNotification(ticket.ID, previousStatus, ticket.Status, surveyRequired)
+		if err := service.notifyTicketStatus(ctx, *ticket, title, message); err != nil {
+			log.Printf("failed to send status notification: %v", err)
 		}
 	}
 
@@ -427,11 +431,11 @@ func (service *TicketService) resolveCategory(value string) (*domain.ServiceCate
 
 func (service *TicketService) generateTicketID() (string, error) {
 	year := service.now().Year()
-	count, err := service.tickets.CountForYear(year)
+	sequence, err := service.tickets.NextTicketSequence(year)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("TK-%d-%03d", year, count+1), nil
+	return fmt.Sprintf("TK-%d-%03d", year, sequence), nil
 }
 
 func (service *TicketService) toTicketDTO(ticket domain.Ticket, category domain.ServiceCategory, surveyScore float64) domain.TicketDTO {
@@ -528,6 +532,63 @@ func attachmentIDsFromRefs(refs []string) []string {
 	return ids
 }
 
+func isDuplicateTicketIDError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	if strings.Contains(message, "duplicate key value") &&
+		strings.Contains(message, "tickets_pkey") {
+		return true
+	}
+	return false
+}
+
+func normalizeInitialTicketStatus(status domain.TicketStatus) domain.TicketStatus {
+	switch status {
+	case domain.StatusWaiting, domain.StatusInProgress, domain.StatusResolved:
+		return status
+	case domain.StatusProcessing:
+		return domain.StatusInProgress
+	default:
+		return domain.StatusResolved
+	}
+}
+
+func statusLabel(status domain.TicketStatus) string {
+	switch status {
+	case domain.StatusWaiting:
+		return "Menunggu"
+	case domain.StatusInProgress:
+		return "Progres"
+	case domain.StatusProcessing:
+		return "Progres"
+	case domain.StatusResolved:
+		return "Selesai"
+	default:
+		return string(status)
+	}
+}
+
+func statusChangeNotification(
+	ticketID string,
+	previous domain.TicketStatus,
+	current domain.TicketStatus,
+	surveyRequired bool,
+) (string, string) {
+	if surveyRequired {
+		return "Tiket Selesai Ditangani",
+			fmt.Sprintf("Tiket %s selesai ditangani. Mohon isi feedback.", ticketID)
+	}
+	return "Status Tiket Diperbarui",
+		fmt.Sprintf(
+			"Tiket %s berubah dari %s ke %s.",
+			ticketID,
+			statusLabel(previous),
+			statusLabel(current),
+		)
+}
+
 func (service *TicketService) mapTickets(tickets []domain.Ticket, scores map[string]float64) []domain.TicketDTO {
 	result := make([]domain.TicketDTO, 0, len(tickets))
 	for _, ticket := range tickets {
@@ -556,9 +617,13 @@ func (service *TicketService) addHistory(ticketID, title, description string) er
 }
 
 func (service *TicketService) notifyTicketStatus(ctx context.Context, ticket domain.Ticket, title string, message string) error {
+	if strings.TrimSpace(ticket.ReporterID) == "" {
+		return nil
+	}
 	notification := domain.Notification{
 		ID:        util.NewUUID(),
 		UserID:    ticket.ReporterID,
+		TicketID:  ticket.ID,
 		Title:     title,
 		Message:   message,
 		IsRead:    false,
@@ -579,6 +644,8 @@ func (service *TicketService) notifyTicketStatus(ctx context.Context, ticket dom
 	}
 	invalidTokens, sendErr := service.fcmClient.SendToTokens(ctx, tokenValues, title, message, map[string]string{
 		"ticket_id": ticket.ID,
+		"title":     title,
+		"body":      message,
 	})
 	if len(invalidTokens) > 0 {
 		unique := make([]string, 0, len(invalidTokens))
