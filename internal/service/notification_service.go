@@ -41,6 +41,7 @@ func (service *NotificationService) List(user domain.User) ([]domain.Notificatio
 	for _, item := range items {
 		result = append(result, domain.NotificationDTO{
 			ID:        item.ID,
+			TicketID:  item.TicketID,
 			Title:     item.Title,
 			Message:   item.Message,
 			Timestamp: item.CreatedAt,
