@@ -75,7 +75,9 @@ func normalizeToHundred(value float64, max int) float64 {
 	if max <= 1 {
 		return 100
 	}
-	normalized := ((value - 1) * 100) / float64(max-1)
+	// Map the minimum Likert choice to 1 star-equivalent (20 on a 0-100 scale),
+	// and the maximum choice to 5 stars-equivalent (100).
+	normalized := 20 + ((value-1)*80)/float64(max-1)
 	if normalized < 0 {
 		return 0
 	}
