@@ -67,11 +67,11 @@ func upsertUser(database *gorm.DB, seed seedUser) error {
         return err
     }
 
-    user := domain.User{
-        ID:           util.NewUUID(),
-        Username:     username,
-        PasswordHash: hashed,
-        Name:         seed.Name,
+	user := domain.User{
+		ID:           util.NewID(10),
+		Username:     username,
+		PasswordHash: hashed,
+		Name:         seed.Name,
         Email:        email,
         Role:         seed.Role,
         Entity:       seed.Entity,

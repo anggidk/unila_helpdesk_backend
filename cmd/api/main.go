@@ -50,10 +50,9 @@ func main() {
 	reportRepo := repository.NewReportRepository(database)
 
 	for _, category := range service.DefaultCategories() {
-		_ = categoryRepo.Upsert(category)
-	}
-	if err := service.CleanupDeprecatedCategories(database, service.CategoryLainnya); err != nil {
-		log.Fatalf("cleanup deprecated categories failed: %v", err)
+		if err := categoryRepo.Upsert(category); err != nil {
+			log.Fatalf("seed category '%s' failed: %v", category.ID, err)
+		}
 	}
 
 	authService := service.NewAuthService(cfg, userRepo, refreshTokenRepo)
@@ -66,9 +65,10 @@ func main() {
 		tokenRepo,
 		attachmentRepo,
 		fcmClient,
+		cfg.BaseURL,
 		domain.TicketStatus(cfg.TicketInitialStatus),
 	)
-	surveyService := service.NewSurveyService(surveyRepo, ticketRepo)
+	surveyService := service.NewSurveyService(surveyRepo, ticketRepo, categoryRepo)
 	notificationService := service.NewNotificationService(notificationRepo, tokenRepo)
 	reportService := service.NewReportService(reportRepo, categoryRepo, surveyRepo)
 
