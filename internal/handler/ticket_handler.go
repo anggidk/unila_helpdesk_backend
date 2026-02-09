@@ -16,10 +16,6 @@ type TicketHandler struct {
 	tickets *service.TicketService
 }
 
-type commentRequest struct {
-	Message string `json:"message"`
-}
-
 func NewTicketHandler(tickets *service.TicketService) *TicketHandler {
 	return &TicketHandler{tickets: tickets}
 }
@@ -33,7 +29,6 @@ func (handler *TicketHandler) RegisterRoutes(public *gin.RouterGroup, auth *gin.
 	auth.POST("/tickets", handler.createTicket)
 	auth.POST("/tickets/:id", handler.updateTicket)
 	auth.POST("/tickets/:id/delete", handler.deleteTicket)
-	auth.POST("/tickets/:id/comments", handler.addComment)
 }
 
 func (handler *TicketHandler) listTickets(c *gin.Context) {
@@ -100,9 +95,6 @@ func parseTicketStatus(raw string) (domain.TicketStatus, error) {
 	switch raw {
 	case string(domain.StatusWaiting):
 		return domain.StatusWaiting, nil
-	case string(domain.StatusProcessing):
-		// Backward compatibility for legacy clients/status values.
-		return domain.StatusInProgress, nil
 	case string(domain.StatusInProgress):
 		return domain.StatusInProgress, nil
 	case string(domain.StatusResolved):
@@ -205,23 +197,4 @@ func (handler *TicketHandler) deleteTicket(c *gin.Context) {
 		return
 	}
 	respondOK(c, gin.H{"deleted": true})
-}
-
-func (handler *TicketHandler) addComment(c *gin.Context) {
-	user, ok := middleware.GetUser(c)
-	if !ok {
-		respondError(c, http.StatusUnauthorized, "token dibutuhkan")
-		return
-	}
-	var req commentRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		respondError(c, http.StatusBadRequest, "payload tidak valid")
-		return
-	}
-	result, err := handler.tickets.AddComment(user, c.Param("id"), req.Message)
-	if err != nil {
-		respondError(c, http.StatusBadRequest, err.Error())
-		return
-	}
-	respondOK(c, result)
 }
