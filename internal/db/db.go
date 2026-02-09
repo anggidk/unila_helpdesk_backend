@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"unila_helpdesk_backend/internal/config"
-	"unila_helpdesk_backend/internal/domain"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -77,96 +76,12 @@ func quoteIdentifier(value string) string {
 }
 
 func AutoMigrate(database *gorm.DB) error {
-	// Normalize legacy schema to avoid type-mismatch errors before AutoMigrate.
-	_ = database.Exec(`
-        DO $$
-        BEGIN
-            IF to_regclass('public.tickets') IS NOT NULL THEN
-                IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tickets_reporter') THEN
-                    ALTER TABLE tickets DROP CONSTRAINT fk_tickets_reporter;
-                END IF;
-                ALTER TABLE tickets ALTER COLUMN id TYPE varchar(64) USING id::varchar(64);
-                ALTER TABLE tickets ALTER COLUMN reporter_id TYPE varchar(36) USING reporter_id::varchar(36);
-            END IF;
-            IF to_regclass('public.ticket_histories') IS NOT NULL THEN
-                IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tickets_history') THEN
-                    ALTER TABLE ticket_histories DROP CONSTRAINT fk_tickets_history;
-                END IF;
-                IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_ticket_histories_ticket') THEN
-                    ALTER TABLE ticket_histories DROP CONSTRAINT fk_ticket_histories_ticket;
-                END IF;
-                ALTER TABLE ticket_histories ALTER COLUMN ticket_id TYPE varchar(64) USING ticket_id::varchar(64);
-            END IF;
-            IF to_regclass('public.ticket_comments') IS NOT NULL THEN
-                IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_ticket_comments_ticket') THEN
-                    ALTER TABLE ticket_comments DROP CONSTRAINT fk_ticket_comments_ticket;
-                END IF;
-                IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tickets_comments') THEN
-                    ALTER TABLE ticket_comments DROP CONSTRAINT fk_tickets_comments;
-                END IF;
-                ALTER TABLE ticket_comments ALTER COLUMN ticket_id TYPE varchar(64) USING ticket_id::varchar(64);
-            END IF;
-            IF to_regclass('public.survey_responses') IS NOT NULL THEN
-                IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_survey_responses_ticket') THEN
-                    ALTER TABLE survey_responses DROP CONSTRAINT fk_survey_responses_ticket;
-                END IF;
-                ALTER TABLE survey_responses ALTER COLUMN ticket_id TYPE varchar(64) USING ticket_id::varchar(64);
-            END IF;
-        END $$;
-    `).Error
-	if err := database.AutoMigrate(
-		&domain.User{},
-		&domain.ServiceCategory{},
-		&domain.Ticket{},
-		&domain.Attachment{},
-		&domain.TicketHistory{},
-		&domain.TicketComment{},
-		&domain.SurveyTemplate{},
-		&domain.SurveyQuestion{},
-		&domain.SurveyResponse{},
-		&domain.Notification{},
-		&domain.FCMToken{},
-		&domain.RefreshToken{},
-	); err != nil {
-		return err
-	}
-
-	// Backfill template_id for legacy survey responses (before template_id existed).
-	if err := database.Exec(`
-        UPDATE survey_responses sr
-        SET template_id = sc.survey_template_id
-        FROM tickets t
-        JOIN service_categories sc ON sc.id = t.category_id
-        WHERE sr.ticket_id = t.id
-          AND (sr.template_id IS NULL OR sr.template_id = '')
-          AND sc.survey_template_id IS NOT NULL
-          AND sc.survey_template_id <> ''
-    `).Error; err != nil {
-		return err
-	}
-
-	// Normalize legacy "processing" status into the active status set.
-	if err := database.Exec(`
-        UPDATE tickets
-        SET status = 'inProgress'
-        WHERE status = 'processing'
-    `).Error; err != nil {
-		return err
-	}
-
-	// Keep only the newest row for each FCM token to prevent cross-account delivery
-	// on shared devices with historical duplicate mappings.
-	if err := database.Exec(`
-        DELETE FROM fcm_tokens stale
-        USING fcm_tokens fresh
-        WHERE stale.token = fresh.token
-          AND stale.id <> fresh.id
-          AND (stale.updated_at, stale.id) < (fresh.updated_at, fresh.id)
-    `).Error; err != nil {
-		return err
-	}
-
-	return nil
+	return database.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("DROP TABLE IF EXISTS public.schema_migrations").Error; err != nil {
+			return err
+		}
+		return tx.Exec(migration20260209Baseline).Error
+	})
 }
 
 func MustAutoMigrate(database *gorm.DB) {
@@ -174,3 +89,292 @@ func MustAutoMigrate(database *gorm.DB) {
 		log.Fatalf("auto migrate failed: %v", err)
 	}
 }
+
+const migration20260209Baseline = `
+CREATE TABLE IF NOT EXISTS public.users (
+    id varchar(10) PRIMARY KEY,
+    username varchar(60) UNIQUE,
+    password_hash text,
+    name varchar(120),
+    email varchar(180) UNIQUE,
+    role varchar(20),
+    entity varchar(120),
+    is_active boolean DEFAULT true,
+    created_at timestamptz,
+    updated_at timestamptz,
+    deleted_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS public.service_categories (
+    id varchar(6) PRIMARY KEY,
+    name varchar(120),
+    guest_allowed boolean,
+    survey_template_id varchar(12),
+    created_at timestamptz,
+    updated_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS public.tickets (
+    id varchar(32) PRIMARY KEY,
+    ticket_number varchar(20),
+    user_id varchar(10),
+    reporter_name varchar(120),
+    email varchar(180),
+    phone varchar(20),
+    is_guest boolean DEFAULT false,
+    title varchar(180),
+    description text,
+    category_id varchar(6),
+    priority varchar(20),
+    status varchar(20),
+    assignee_id varchar(10),
+    staff_notes text,
+    survey_required boolean DEFAULT false,
+    created_at timestamptz,
+    updated_at timestamptz,
+    deleted_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS public.ticket_histories (
+    id varchar(64) PRIMARY KEY,
+    ticket_id varchar(32),
+    title varchar(120),
+    description text,
+    created_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS public.attachments (
+    id varchar(32) PRIMARY KEY,
+    ticket_id varchar(32),
+    filename varchar(180),
+    content_type varchar(80),
+    size bigint,
+    data bytea,
+    created_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS public.survey_templates (
+    id varchar(12) PRIMARY KEY,
+    title varchar(160),
+    description text,
+    framework varchar(80),
+    category_id varchar(6),
+    created_at timestamptz,
+    updated_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS public.survey_questions (
+    id varchar(32) PRIMARY KEY,
+    template_id varchar(12),
+    text text,
+    type varchar(24),
+    options jsonb,
+    created_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS public.survey_responses (
+    id varchar(32) PRIMARY KEY,
+    ticket_id varchar(32),
+    user_id varchar(10),
+    template_id varchar(12),
+    answers jsonb,
+    score numeric,
+    created_at timestamptz
+);
+
+ALTER TABLE public.service_categories
+    ALTER COLUMN survey_template_id TYPE varchar(12);
+ALTER TABLE public.tickets
+    ALTER COLUMN id TYPE varchar(32);
+ALTER TABLE public.ticket_histories
+    ALTER COLUMN id TYPE varchar(64),
+    ALTER COLUMN ticket_id TYPE varchar(32);
+ALTER TABLE public.attachments
+    ALTER COLUMN id TYPE varchar(32),
+    ALTER COLUMN ticket_id TYPE varchar(32);
+ALTER TABLE public.survey_templates
+    ALTER COLUMN id TYPE varchar(12);
+ALTER TABLE public.survey_questions
+    ALTER COLUMN id TYPE varchar(32),
+    ALTER COLUMN template_id TYPE varchar(12);
+ALTER TABLE public.survey_responses
+    ALTER COLUMN id TYPE varchar(32),
+    ALTER COLUMN ticket_id TYPE varchar(32),
+    ALTER COLUMN template_id TYPE varchar(12);
+
+CREATE TABLE IF NOT EXISTS public.notifications (
+    id varchar(64) PRIMARY KEY,
+    user_id varchar(10),
+    ticket_id varchar(32),
+    title varchar(160),
+    message text,
+    is_read boolean DEFAULT false,
+    created_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS public.fcm_tokens (
+    id varchar(64) PRIMARY KEY,
+    user_id varchar(10),
+    token text,
+    created_at timestamptz,
+    updated_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS public.refresh_tokens (
+    id varchar(64) PRIMARY KEY,
+    user_id varchar(10),
+    token_hash varchar(64),
+    expires_at timestamptz,
+    created_at timestamptz
+);
+
+ALTER TABLE public.notifications
+    ALTER COLUMN id TYPE varchar(64),
+    ALTER COLUMN ticket_id TYPE varchar(32);
+ALTER TABLE public.fcm_tokens
+    ALTER COLUMN id TYPE varchar(64);
+ALTER TABLE public.refresh_tokens
+    ALTER COLUMN id TYPE varchar(64);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_attachments_ticket_id') THEN
+        ALTER TABLE public.attachments
+            ADD CONSTRAINT fk_attachments_ticket_id
+            FOREIGN KEY (ticket_id) REFERENCES public.tickets(id)
+            ON UPDATE NO ACTION ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_fcm_tokens_user_id') THEN
+        ALTER TABLE public.fcm_tokens
+            ADD CONSTRAINT fk_fcm_tokens_user_id
+            FOREIGN KEY (user_id) REFERENCES public.users(id)
+            ON UPDATE NO ACTION ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_notifications_user_id') THEN
+        ALTER TABLE public.notifications
+            ADD CONSTRAINT fk_notifications_user_id
+            FOREIGN KEY (user_id) REFERENCES public.users(id)
+            ON UPDATE NO ACTION ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_notifications_ticket_id') THEN
+        ALTER TABLE public.notifications
+            ADD CONSTRAINT fk_notifications_ticket_id
+            FOREIGN KEY (ticket_id) REFERENCES public.tickets(id)
+            ON UPDATE NO ACTION ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_refresh_tokens_user_id') THEN
+        ALTER TABLE public.refresh_tokens
+            ADD CONSTRAINT fk_refresh_tokens_user_id
+            FOREIGN KEY (user_id) REFERENCES public.users(id)
+            ON UPDATE NO ACTION ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_survey_questions_template_id') THEN
+        ALTER TABLE public.survey_questions
+            ADD CONSTRAINT fk_survey_questions_template_id
+            FOREIGN KEY (template_id) REFERENCES public.survey_templates(id)
+            ON UPDATE NO ACTION ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_survey_responses_ticket_id') THEN
+        ALTER TABLE public.survey_responses
+            ADD CONSTRAINT fk_survey_responses_ticket_id
+            FOREIGN KEY (ticket_id) REFERENCES public.tickets(id)
+            ON UPDATE NO ACTION ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_survey_responses_user_id') THEN
+        ALTER TABLE public.survey_responses
+            ADD CONSTRAINT fk_survey_responses_user_id
+            FOREIGN KEY (user_id) REFERENCES public.users(id)
+            ON UPDATE NO ACTION ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_survey_responses_template_id') THEN
+        ALTER TABLE public.survey_responses
+            ADD CONSTRAINT fk_survey_responses_template_id
+            FOREIGN KEY (template_id) REFERENCES public.survey_templates(id)
+            ON UPDATE NO ACTION ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_survey_templates_category_id') THEN
+        ALTER TABLE public.survey_templates
+            ADD CONSTRAINT fk_survey_templates_category_id
+            FOREIGN KEY (category_id) REFERENCES public.service_categories(id)
+            ON UPDATE NO ACTION ON DELETE NO ACTION;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_ticket_histories_ticket_id') THEN
+        ALTER TABLE public.ticket_histories
+            ADD CONSTRAINT fk_ticket_histories_ticket_id
+            FOREIGN KEY (ticket_id) REFERENCES public.tickets(id)
+            ON UPDATE NO ACTION ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tickets_user_id') THEN
+        ALTER TABLE public.tickets
+            ADD CONSTRAINT fk_tickets_user_id
+            FOREIGN KEY (user_id) REFERENCES public.users(id)
+            ON UPDATE NO ACTION ON DELETE SET NULL;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tickets_assignee_id') THEN
+        ALTER TABLE public.tickets
+            ADD CONSTRAINT fk_tickets_assignee_id
+            FOREIGN KEY (assignee_id) REFERENCES public.users(id)
+            ON UPDATE NO ACTION ON DELETE SET NULL;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tickets_category_id') THEN
+        ALTER TABLE public.tickets
+            ADD CONSTRAINT fk_tickets_category_id
+            FOREIGN KEY (category_id) REFERENCES public.service_categories(id)
+            ON UPDATE NO ACTION ON DELETE NO ACTION;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_service_categories_survey_template_id') THEN
+        ALTER TABLE public.service_categories
+            ADD CONSTRAINT fk_service_categories_survey_template_id
+            FOREIGN KEY (survey_template_id) REFERENCES public.survey_templates(id)
+            ON UPDATE NO ACTION ON DELETE SET NULL;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_tickets_guest_identity') THEN
+        ALTER TABLE public.tickets
+            ADD CONSTRAINT chk_tickets_guest_identity
+            CHECK (
+                is_guest = false OR
+                (user_id IS NULL AND email IS NOT NULL AND phone IS NOT NULL)
+            );
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_tickets_registered_user') THEN
+        ALTER TABLE public.tickets
+            ADD CONSTRAINT chk_tickets_registered_user
+            CHECK (
+                is_guest = true OR user_id IS NOT NULL
+            );
+    END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_tickets_ticket_number ON public.tickets(ticket_number);
+CREATE INDEX IF NOT EXISTS ix_tickets_user_id ON public.tickets(user_id);
+CREATE INDEX IF NOT EXISTS ix_tickets_category_id ON public.tickets(category_id);
+CREATE INDEX IF NOT EXISTS ix_tickets_assignee_id ON public.tickets(assignee_id);
+CREATE INDEX IF NOT EXISTS ix_tickets_status ON public.tickets(status);
+CREATE INDEX IF NOT EXISTS ix_tickets_created_at ON public.tickets(created_at);
+CREATE INDEX IF NOT EXISTS ix_attachments_ticket_id ON public.attachments(ticket_id);
+CREATE INDEX IF NOT EXISTS ix_ticket_histories_ticket_id_created_at ON public.ticket_histories(ticket_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_survey_responses_ticket_id ON public.survey_responses(ticket_id);
+CREATE INDEX IF NOT EXISTS ix_survey_responses_user_id ON public.survey_responses(user_id);
+CREATE INDEX IF NOT EXISTS ix_survey_responses_template_id ON public.survey_responses(template_id);
+CREATE INDEX IF NOT EXISTS ix_refresh_tokens_user_id ON public.refresh_tokens(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_refresh_tokens_token_hash ON public.refresh_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS ix_refresh_tokens_expires_at ON public.refresh_tokens(expires_at);
+`

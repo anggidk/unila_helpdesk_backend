@@ -20,15 +20,13 @@ type TicketHistoryDTO struct {
 	Timestamp   time.Time `json:"timestamp"`
 }
 
-type TicketCommentDTO struct {
-	Author    string    `json:"author"`
-	Message   string    `json:"message"`
-	Timestamp time.Time `json:"timestamp"`
-	IsStaff   bool      `json:"isStaff"`
-}
-
 type TicketDTO struct {
 	ID             string             `json:"id"`
+	TicketNumber   string             `json:"ticketNumber"`
+	UserID         string             `json:"userId,omitempty"`
+	ReporterName   string             `json:"reporterName"`
+	Email          string             `json:"email"`
+	Phone          string             `json:"phone,omitempty"`
 	Title          string             `json:"title"`
 	Description    string             `json:"description"`
 	Category       string             `json:"category"`
@@ -36,12 +34,11 @@ type TicketDTO struct {
 	Status         TicketStatus       `json:"status"`
 	Priority       TicketPriority     `json:"priority"`
 	CreatedAt      time.Time          `json:"createdAt"`
-	Reporter       string             `json:"reporter"`
 	IsGuest        bool               `json:"isGuest"`
-	Assignee       string             `json:"assignee,omitempty"`
+	AssigneeID     string             `json:"assigneeId,omitempty"`
+	StaffNotes     string             `json:"staffNotes,omitempty"`
 	Attachments    []string           `json:"attachments"`
 	History        []TicketHistoryDTO `json:"history"`
-	Comments       []TicketCommentDTO `json:"comments"`
 	SurveyRequired bool               `json:"surveyRequired"`
 	SurveyScore    float64            `json:"surveyScore"`
 }
