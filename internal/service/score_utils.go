@@ -1,7 +1,6 @@
 package service
 
 import (
-	"encoding/json"
 	"strconv"
 	"strings"
 
@@ -85,47 +84,4 @@ func normalizeToHundred(value float64, max int) float64 {
 		return 100
 	}
 	return normalized
-}
-
-func normalizeLegacyScore(score float64) float64 {
-	if score > 0 && score <= 5 {
-		return normalizeToHundred(score, 5)
-	}
-	return score
-}
-
-func scoreFromRawAnswers(raw json.RawMessage) float64 {
-	var answers map[string]interface{}
-	if err := json.Unmarshal(raw, &answers); err != nil {
-		return 0
-	}
-	return calculateLegacyScore(answers)
-}
-
-func calculateLegacyScore(answers map[string]interface{}) float64 {
-	if len(answers) == 0 {
-		return 0
-	}
-	var total float64
-	var count int
-	for _, value := range answers {
-		if score, ok := scoreFromLegacyValue(value); ok {
-			total += score
-			count++
-		}
-	}
-	if count == 0 {
-		return 0
-	}
-	return total / float64(count)
-}
-
-func scoreFromLegacyValue(value interface{}) (float64, bool) {
-	if score, ok := scoreFromScale(value, 5); ok {
-		return score, true
-	}
-	if score, ok := scoreFromYesNo(value); ok {
-		return score, true
-	}
-	return 0, false
 }

@@ -12,9 +12,10 @@ import (
 )
 
 type SurveyService struct {
-	surveys *repository.SurveyRepository
-	tickets *repository.TicketRepository
-	now     func() time.Time
+	surveys    *repository.SurveyRepository
+	tickets    *repository.TicketRepository
+	categories *repository.CategoryRepository
+	now        func() time.Time
 }
 
 type SurveyTemplateRequest struct {
@@ -26,6 +27,7 @@ type SurveyTemplateRequest struct {
 }
 
 type SurveyQuestionRequest struct {
+	ID      string   `json:"id"`
 	Text    string   `json:"text"`
 	Type    string   `json:"type"`
 	Options []string `json:"options"`
@@ -36,11 +38,16 @@ type SurveyResponseRequest struct {
 	Answers  map[string]interface{} `json:"answers"`
 }
 
-func NewSurveyService(surveys *repository.SurveyRepository, tickets *repository.TicketRepository) *SurveyService {
+func NewSurveyService(
+	surveys *repository.SurveyRepository,
+	tickets *repository.TicketRepository,
+	categories *repository.CategoryRepository,
+) *SurveyService {
 	return &SurveyService{
-		surveys: surveys,
-		tickets: tickets,
-		now:     time.Now,
+		surveys:    surveys,
+		tickets:    tickets,
+		categories: categories,
+		now:        time.Now,
 	}
 }
 
@@ -69,7 +76,7 @@ func (service *SurveyService) CreateTemplate(req SurveyTemplateRequest) (domain.
 	}
 
 	template := domain.SurveyTemplate{
-		ID:          util.NewUUID(),
+		ID:          util.NewID(12),
 		Title:       strings.TrimSpace(req.Title),
 		Description: strings.TrimSpace(req.Description),
 		Framework:   strings.TrimSpace(req.Framework),
@@ -83,9 +90,13 @@ func (service *SurveyService) CreateTemplate(req SurveyTemplateRequest) (domain.
 		if strings.TrimSpace(question.Text) == "" {
 			continue
 		}
+		questionID := strings.TrimSpace(question.ID)
+		if questionID == "" {
+			questionID = util.NewID(32)
+		}
 		options, _ := json.Marshal(question.Options)
 		questions = append(questions, domain.SurveyQuestion{
-			ID:         util.NewUUID(),
+			ID:         questionID,
 			TemplateID: template.ID,
 			Text:       strings.TrimSpace(question.Text),
 			Type:       domain.SurveyQuestionType(question.Type),
@@ -96,6 +107,9 @@ func (service *SurveyService) CreateTemplate(req SurveyTemplateRequest) (domain.
 	template.Questions = questions
 
 	if err := service.surveys.CreateTemplate(&template); err != nil {
+		return domain.SurveyTemplateDTO{}, err
+	}
+	if err := service.categories.BindTemplateToCategory(template.CategoryID, template.ID); err != nil {
 		return domain.SurveyTemplateDTO{}, err
 	}
 	return mapSurveyTemplate(template), nil
@@ -128,9 +142,13 @@ func (service *SurveyService) UpdateTemplate(templateID string, req SurveyTempla
 		if strings.TrimSpace(question.Text) == "" {
 			continue
 		}
+		questionID := strings.TrimSpace(question.ID)
+		if questionID == "" {
+			questionID = util.NewID(32)
+		}
 		options, _ := json.Marshal(question.Options)
 		questions = append(questions, domain.SurveyQuestion{
-			ID:         util.NewUUID(),
+			ID:         questionID,
 			TemplateID: template.ID,
 			Text:       strings.TrimSpace(question.Text),
 			Type:       domain.SurveyQuestionType(question.Type),
@@ -141,6 +159,9 @@ func (service *SurveyService) UpdateTemplate(templateID string, req SurveyTempla
 	template.Questions = questions
 
 	if err := service.surveys.ReplaceTemplate(template); err != nil {
+		return domain.SurveyTemplateDTO{}, err
+	}
+	if err := service.categories.BindTemplateToCategory(template.CategoryID, template.ID); err != nil {
 		return domain.SurveyTemplateDTO{}, err
 	}
 	return mapSurveyTemplate(*template), nil
@@ -164,7 +185,7 @@ func (service *SurveyService) SubmitSurvey(user domain.User, req SurveyResponseR
 	if err != nil {
 		return err
 	}
-	if ticket.ReporterID != user.ID {
+	if ticket.UserID != user.ID {
 		return errors.New("tidak memiliki akses untuk tiket ini")
 	}
 	if ticket.Status != domain.StatusResolved {
@@ -184,17 +205,16 @@ func (service *SurveyService) SubmitSurvey(user domain.User, req SurveyResponseR
 		return err
 	}
 
-	template, _ := service.surveys.FindByCategory(ticket.CategoryID)
-	templateID := ""
-	if template != nil {
-		templateID = template.ID
+	template, err := service.surveys.FindByCategory(ticket.CategoryID)
+	if err != nil || template == nil || strings.TrimSpace(template.ID) == "" {
+		return errors.New("template survei untuk kategori tiket tidak ditemukan")
 	}
 
 	response := domain.SurveyResponse{
-		ID:         util.NewUUID(),
+		ID:         util.NewID(32),
 		TicketID:   ticket.ID,
 		UserID:     user.ID,
-		TemplateID: templateID,
+		TemplateID: template.ID,
 		Answers:    payload,
 		Score:      calculateSurveyScore(req.Answers, template),
 		CreatedAt:  service.now(),
@@ -292,7 +312,7 @@ func calculateSurveyScore(answers map[string]interface{}, template *domain.Surve
 		return 0
 	}
 	if template == nil || len(template.Questions) == 0 {
-		return calculateLegacyScore(answers)
+		return 0
 	}
 	var total float64
 	var count int
