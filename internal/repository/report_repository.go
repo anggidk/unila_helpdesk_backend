@@ -218,7 +218,7 @@ func (repo *ReportRepository) ListRegisteredTicketRowsByEntityCategory(start tim
 	if err := repo.db.Raw(`
         SELECT u.entity AS entity, t.category_id AS category_id, COUNT(*) AS total
         FROM tickets t
-        JOIN users u ON u.id = t.reporter_id
+        JOIN users u ON u.id = t.user_id
         WHERE u.role = 'registered'
           AND t.created_at >= ? AND t.created_at < ?
         GROUP BY u.entity, t.category_id

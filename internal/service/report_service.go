@@ -172,11 +172,6 @@ func calculateCohortScores(responses []domain.SurveyResponse) (float64, float64)
 
 	for _, response := range responses {
 		score := response.Score
-		if score <= 0 {
-			parsed := scoreFromRawAnswers(json.RawMessage(response.Answers))
-			score = parsed
-		}
-		score = normalizeLegacyScore(score)
 		if score > 0 {
 			total += score
 			count++
@@ -252,7 +247,6 @@ func (service *ReportService) DashboardSummary() (domain.DashboardSummaryDTO, er
 	if err != nil {
 		return domain.DashboardSummaryDTO{}, err
 	}
-	avgScore = normalizeLegacyScore(avgScore)
 
 	return domain.DashboardSummaryDTO{
 		TotalTickets:       int(totalTickets),
@@ -274,13 +268,11 @@ func (service *ReportService) ServiceSatisfactionSummary(period string, periods 
 
 	totalWeighted := 0.0
 	for _, row := range rows {
-		row.AvgScore = normalizeLegacyScore(row.AvgScore)
 		totalWeighted += row.AvgScore * float64(row.Responses)
 	}
 
 	result := make([]domain.ServiceSatisfactionDTO, 0, len(rows))
 	for _, row := range rows {
-		row.AvgScore = normalizeLegacyScore(row.AvgScore)
 		label := categories[row.CategoryID]
 		if label == "" {
 			label = row.CategoryID
