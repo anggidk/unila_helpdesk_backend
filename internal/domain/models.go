@@ -29,7 +29,6 @@ const (
 
 const (
 	StatusWaiting    TicketStatus = "waiting"
-	StatusProcessing TicketStatus = "processing"
 	StatusInProgress TicketStatus = "inProgress"
 	StatusResolved   TicketStatus = "resolved"
 )
@@ -47,7 +46,7 @@ const (
 )
 
 type User struct {
-	ID           string   `gorm:"primaryKey;type:varchar(36)"`
+	ID           string   `gorm:"primaryKey;size:10"`
 	Username     string   `gorm:"size:60;uniqueIndex"`
 	PasswordHash string   `gorm:"type:text"`
 	Name         string   `gorm:"size:120"`
@@ -61,58 +60,49 @@ type User struct {
 }
 
 type ServiceCategory struct {
-	ID               string `gorm:"primaryKey;size:60"`
+	ID               string `gorm:"primaryKey;size:6"`
 	Name             string `gorm:"size:120"`
 	GuestAllowed     bool
-	SurveyTemplateID string `gorm:"size:64"`
+	SurveyTemplateID string `gorm:"size:12"`
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
 
 type Ticket struct {
-	ID             string         `gorm:"primaryKey;size:64"`
+	ID             string         `gorm:"primaryKey;size:32"`
+	TicketNumber   string         `gorm:"size:20;uniqueIndex"`
+	UserID         string         `gorm:"size:10;index"`
+	ReporterName   string         `gorm:"size:120"`
+	Email          string         `gorm:"size:180"`
+	Phone          *string        `gorm:"size:20"`
+	IsGuest        bool           `gorm:"default:false"`
 	Title          string         `gorm:"size:180"`
 	Description    string         `gorm:"type:text"`
-	CategoryID     string         `gorm:"size:60;index"`
+	CategoryID     string         `gorm:"size:6;index"`
 	Priority       TicketPriority `gorm:"size:20"`
 	Status         TicketStatus   `gorm:"size:20"`
-	ReporterID     string         `gorm:"size:36;index"`
-	ReporterName   string         `gorm:"size:120"`
-	IsGuest        bool           `gorm:"default:false"`
-	Assignee       string         `gorm:"size:120"`
+	AssigneeID     *string        `gorm:"size:10;index"`
+	StaffNotes     string         `gorm:"type:text"`
 	SurveyRequired bool           `gorm:"default:false"`
-	Attachments    datatypes.JSON `gorm:"type:jsonb"`
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	DeletedAt      gorm.DeletedAt `gorm:"index"`
 
 	Category ServiceCategory `gorm:"foreignKey:CategoryID"`
 	History  []TicketHistory `gorm:"foreignKey:TicketID"`
-	Comments []TicketComment `gorm:"foreignKey:TicketID"`
 }
 
 type TicketHistory struct {
-	ID          string    `gorm:"primaryKey;type:varchar(36)"`
-	TicketID    string    `gorm:"size:64;index"`
-	Title       string    `gorm:"size:160"`
-	Description string    `gorm:"type:text"`
-	Timestamp   time.Time `gorm:"index"`
+	ID          string `gorm:"primaryKey;size:64"`
+	TicketID    string `gorm:"size:32;index"`
+	Title       string `gorm:"size:120"`
+	Description string `gorm:"type:text"`
 	CreatedAt   time.Time
 }
 
-type TicketComment struct {
-	ID        string `gorm:"primaryKey;type:varchar(36)"`
-	TicketID  string `gorm:"size:64;index"`
-	Author    string `gorm:"size:120"`
-	Message   string `gorm:"type:text"`
-	IsStaff   bool
-	Timestamp time.Time `gorm:"index"`
-	CreatedAt time.Time
-}
-
 type Attachment struct {
-	ID          string `gorm:"primaryKey;size:64"`
-	TicketID    string `gorm:"size:64;index"`
+	ID          string `gorm:"primaryKey;size:32"`
+	TicketID    string `gorm:"size:32;index"`
 	Filename    string `gorm:"size:180"`
 	ContentType string `gorm:"size:80"`
 	Size        int64
@@ -121,19 +111,19 @@ type Attachment struct {
 }
 
 type SurveyTemplate struct {
-	ID          string           `gorm:"primaryKey;size:64"`
+	ID          string           `gorm:"primaryKey;size:12"`
 	Title       string           `gorm:"size:160"`
 	Description string           `gorm:"type:text"`
 	Framework   string           `gorm:"size:80"`
-	CategoryID  string           `gorm:"size:60;index"`
+	CategoryID  string           `gorm:"size:6;index"`
 	Questions   []SurveyQuestion `gorm:"foreignKey:TemplateID"`
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
 
 type SurveyQuestion struct {
-	ID         string             `gorm:"primaryKey;size:64"`
-	TemplateID string             `gorm:"size:64;index"`
+	ID         string             `gorm:"primaryKey;size:32"`
+	TemplateID string             `gorm:"size:12;index"`
 	Text       string             `gorm:"type:text"`
 	Type       SurveyQuestionType `gorm:"size:24"`
 	Options    datatypes.JSON     `gorm:"type:jsonb"`
@@ -141,19 +131,19 @@ type SurveyQuestion struct {
 }
 
 type SurveyResponse struct {
-	ID         string         `gorm:"primaryKey;type:varchar(36)"`
-	TicketID   string         `gorm:"size:64;index"`
-	UserID     string         `gorm:"size:36;index"`
-	TemplateID string         `gorm:"size:64;index"`
+	ID         string         `gorm:"primaryKey;size:32"`
+	TicketID   string         `gorm:"size:32;index"`
+	UserID     string         `gorm:"size:10;index"`
+	TemplateID string         `gorm:"size:12;index"`
 	Answers    datatypes.JSON `gorm:"type:jsonb"`
 	Score      float64        `gorm:"default:0"`
 	CreatedAt  time.Time
 }
 
 type Notification struct {
-	ID        string `gorm:"primaryKey;type:varchar(36)"`
-	UserID    string `gorm:"size:36;index"`
-	TicketID  string `gorm:"size:64;index"`
+	ID        string `gorm:"primaryKey;size:64"`
+	UserID    string `gorm:"size:10;index"`
+	TicketID  string `gorm:"size:32;index"`
 	Title     string `gorm:"size:160"`
 	Message   string `gorm:"type:text"`
 	IsRead    bool   `gorm:"default:false"`
@@ -161,17 +151,16 @@ type Notification struct {
 }
 
 type FCMToken struct {
-	ID        string `gorm:"primaryKey;type:varchar(36)"`
-	UserID    string `gorm:"size:36;index"`
+	ID        string `gorm:"primaryKey;size:64"`
+	UserID    string `gorm:"size:10;index"`
 	Token     string `gorm:"type:text"`
-	Platform  string `gorm:"size:40"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
 type RefreshToken struct {
-	ID        string    `gorm:"primaryKey;type:varchar(36)"`
-	UserID    string    `gorm:"size:36;index"`
+	ID        string    `gorm:"primaryKey;size:64"`
+	UserID    string    `gorm:"size:10;index"`
 	TokenHash string    `gorm:"size:64;uniqueIndex"`
 	ExpiresAt time.Time `gorm:"index"`
 	CreatedAt time.Time

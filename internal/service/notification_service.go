@@ -16,8 +16,7 @@ type NotificationService struct {
 }
 
 type FCMRegisterRequest struct {
-	Token    string `json:"token"`
-	Platform string `json:"platform"`
+	Token string `json:"token"`
 }
 
 type FCMUnregisterRequest struct {
@@ -60,10 +59,9 @@ func (service *NotificationService) RegisterToken(user domain.User, req FCMRegis
 		return nil
 	}
 	token := domain.FCMToken{
-		ID:        util.NewUUID(),
+		ID:        util.NewID(64),
 		UserID:    user.ID,
 		Token:     tokenValue,
-		Platform:  req.Platform,
 		CreatedAt: service.now(),
 		UpdatedAt: service.now(),
 	}
