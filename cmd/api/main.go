@@ -20,7 +20,10 @@ import (
 
 func main() {
 	_ = godotenv.Load()
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("config load failed: %v", err)
+	}
 	validateConfig(cfg)
 
 	// Set Gin mode berdasarkan environment

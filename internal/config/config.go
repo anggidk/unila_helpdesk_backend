@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -28,70 +29,152 @@ type Config struct {
 	FCMCredentials        string
 }
 
-func Load() Config {
-	jwtExpiry := envDuration("JWT_EXPIRY", 0)
-	jwtExpiryUser := envDuration("JWT_EXPIRY_USER", jwtExpiry)
-	jwtExpiryAdmin := envDuration("JWT_EXPIRY_ADMIN", jwtExpiry)
-	jwtRefreshExpiry := envDuration("JWT_REFRESH_EXPIRY", 0)
-	jwtRefreshExpiryUser := envDuration("JWT_REFRESH_EXPIRY_USER", jwtRefreshExpiry)
-	jwtRefreshExpiryAdmin := envDuration("JWT_REFRESH_EXPIRY_ADMIN", jwtRefreshExpiry)
+func Load() (Config, error) {
+	appName, err := envRequiredString("APP_NAME")
+	if err != nil {
+		return Config{}, err
+	}
+	environment, err := envRequiredString("APP_ENV")
+	if err != nil {
+		return Config{}, err
+	}
+	httpPort, err := envRequiredString("HTTP_PORT")
+	if err != nil {
+		return Config{}, err
+	}
+	baseURL, err := envRequiredString("BASE_URL")
+	if err != nil {
+		return Config{}, err
+	}
+	ticketInitialStatus, err := envRequiredString("TICKET_INITIAL_STATUS")
+	if err != nil {
+		return Config{}, err
+	}
+	jwtSecret, err := envRequiredString("JWT_SECRET")
+	if err != nil {
+		return Config{}, err
+	}
+	jwtExpiry, err := envRequiredDuration("JWT_EXPIRY")
+	if err != nil {
+		return Config{}, err
+	}
+	jwtExpiryUser, err := envRequiredDuration("JWT_EXPIRY_USER")
+	if err != nil {
+		return Config{}, err
+	}
+	jwtExpiryAdmin, err := envRequiredDuration("JWT_EXPIRY_ADMIN")
+	if err != nil {
+		return Config{}, err
+	}
+	jwtRefreshExpiry, err := envRequiredDuration("JWT_REFRESH_EXPIRY")
+	if err != nil {
+		return Config{}, err
+	}
+	jwtRefreshExpiryUser, err := envRequiredDuration("JWT_REFRESH_EXPIRY_USER")
+	if err != nil {
+		return Config{}, err
+	}
+	jwtRefreshExpiryAdmin, err := envRequiredDuration("JWT_REFRESH_EXPIRY_ADMIN")
+	if err != nil {
+		return Config{}, err
+	}
+	databaseURL, err := envRequiredString("DATABASE_URL")
+	if err != nil {
+		return Config{}, err
+	}
+	databaseMaxConns, err := envRequiredInt("DB_MAX_CONNS")
+	if err != nil {
+		return Config{}, err
+	}
+	databaseIdleConns, err := envRequiredInt("DB_IDLE_CONNS")
+	if err != nil {
+		return Config{}, err
+	}
+	corsOrigins, err := envRequiredString("CORS_ORIGINS")
+	if err != nil {
+		return Config{}, err
+	}
+	fcmEnabled, err := envRequiredBool("FCM_ENABLED")
+	if err != nil {
+		return Config{}, err
+	}
+
+	fcmCredentials := ""
+	if fcmEnabled {
+		fcmCredentials, err = envRequiredString("FCM_CREDENTIALS")
+		if err != nil {
+			return Config{}, err
+		}
+	}
+
 	return Config{
-		AppName:               envString("APP_NAME", ""),
-		Environment:           envString("APP_ENV", ""),
-		HTTPPort:              envString("HTTP_PORT", ""),
-		BaseURL:               envString("BASE_URL", ""),
-		TicketInitialStatus:   envString("TICKET_INITIAL_STATUS", "resolved"),
-		JWTSecret:             envString("JWT_SECRET", ""),
+		AppName:               appName,
+		Environment:           environment,
+		HTTPPort:              httpPort,
+		BaseURL:               baseURL,
+		TicketInitialStatus:   ticketInitialStatus,
+		JWTSecret:             jwtSecret,
 		JWTExpiry:             jwtExpiry,
 		JWTExpiryUser:         jwtExpiryUser,
 		JWTExpiryAdmin:        jwtExpiryAdmin,
 		JWTRefreshExpiry:      jwtRefreshExpiry,
 		JWTRefreshExpiryUser:  jwtRefreshExpiryUser,
 		JWTRefreshExpiryAdmin: jwtRefreshExpiryAdmin,
-		DatabaseURL:           envString("DATABASE_URL", ""),
-		DatabaseMaxConns:      envInt("DB_MAX_CONNS", 0),
-		DatabaseIdleConns:     envInt("DB_IDLE_CONNS", 0),
-		CORSOrigins:           envString("CORS_ORIGINS", ""),
-		FCMEnabled:            envBool("FCM_ENABLED", false),
-		FCMCredentials:        envString("FCM_CREDENTIALS", ""),
-	}
+		DatabaseURL:           databaseURL,
+		DatabaseMaxConns:      databaseMaxConns,
+		DatabaseIdleConns:     databaseIdleConns,
+		CORSOrigins:           corsOrigins,
+		FCMEnabled:            fcmEnabled,
+		FCMCredentials:        fcmCredentials,
+	}, nil
 }
 
-func envString(key, fallback string) string {
-	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-		return value
+func envRequiredString(key string) (string, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return "", fmt.Errorf("%s is required", key)
 	}
-	return fallback
+	return value, nil
 }
 
-func envBool(key string, fallback bool) bool {
-	raw := strings.ToLower(envString(key, ""))
-	if raw == "" {
-		return fallback
-	}
-	return raw == "true" || raw == "1" || raw == "yes"
-}
-
-func envInt(key string, fallback int) int {
-	raw := envString(key, "")
-	if raw == "" {
-		return fallback
-	}
-	var value int
-	_, err := fmt.Sscanf(raw, "%d", &value)
+func envRequiredBool(key string) (bool, error) {
+	raw, err := envRequiredString(key)
 	if err != nil {
-		return fallback
+		return false, err
 	}
-	return value
+	switch strings.ToLower(raw) {
+	case "true", "1", "yes":
+		return true, nil
+	case "false", "0", "no":
+		return false, nil
+	default:
+		return false, fmt.Errorf("%s must be a boolean value", key)
+	}
 }
 
-func envDuration(key string, fallback time.Duration) time.Duration {
-	raw := envString(key, "")
-	if raw == "" {
-		return fallback
+func envRequiredInt(key string) (int, error) {
+	raw, err := envRequiredString(key)
+	if err != nil {
+		return 0, err
 	}
-	if parsed, err := time.ParseDuration(raw); err == nil {
-		return parsed
+	value, parseErr := strconv.Atoi(raw)
+	if parseErr != nil {
+		return 0, fmt.Errorf("%s must be an integer", key)
 	}
-	return fallback
+	if value <= 0 {
+		return 0, fmt.Errorf("%s must be > 0", key)
+	}
+	return value, nil
+}
+
+func envRequiredDuration(key string) (time.Duration, error) {
+	raw, err := envRequiredString(key)
+	if err != nil {
+		return 0, err
+	}
+	parsed, parseErr := time.ParseDuration(raw)
+	if parseErr != nil {
+		return 0, fmt.Errorf("%s must be a valid duration", key)
+	}
+	return parsed, nil
 }
