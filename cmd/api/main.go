@@ -71,7 +71,7 @@ func main() {
 		cfg.BaseURL,
 		domain.TicketStatus(cfg.TicketInitialStatus),
 	)
-	surveyService := service.NewSurveyService(surveyRepo, ticketRepo, categoryRepo)
+	surveyService := service.NewSurveyService(surveyRepo, ticketRepo)
 	notificationService := service.NewNotificationService(notificationRepo, tokenRepo)
 	reportService := service.NewReportService(reportRepo, categoryRepo, surveyRepo)
 
