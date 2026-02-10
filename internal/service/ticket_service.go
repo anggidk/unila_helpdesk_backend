@@ -163,8 +163,8 @@ func (service *TicketService) createTicketCore(params ticketCoreParams) (domain.
 		}
 
 		_ = service.attachments.AttachToTicket(attachmentIDsFromRefs(params.attachments), ticket.ID)
-		_ = service.addHistory(ticket.ID, "Ticket Created", params.historyNote)
-		_ = service.addHistory(ticket.ID, "Status Updated", fmt.Sprintf("Status diperbarui ke %s", ticket.Status))
+		_ = service.addHistory(ticket.ID, "Tiket Dibuat", params.historyNote)
+		_ = service.addHistory(ticket.ID, "Status Diperbarui", statusHistoryDescription(ticket.Status))
 		return ticket, category, nil
 	}
 
@@ -228,7 +228,7 @@ func (service *TicketService) CreateGuestTicket(ctx context.Context, req GuestTi
 		email:        req.Email,
 		phone:        phoneRef,
 		isGuest:      true,
-		historyNote:  "Dilaporkan oleh guest",
+		historyNote:  "Dilaporkan oleh pengguna tamu",
 	})
 	if err != nil {
 		return domain.TicketDTO{}, err
@@ -275,8 +275,8 @@ func (service *TicketService) UpdateTicket(ctx context.Context, user domain.User
 
 	statusChanged := false
 	previousStatus := ticket.Status
-	historyTitle := "Ticket Updated"
-	historyDesc := "Perubahan tiket diperbarui"
+	historyTitle := "Tiket Diperbarui"
+	historyDesc := "Perubahan tiket disimpan"
 
 	if user.Role == domain.RoleAdmin {
 		if req.Status != nil && ticket.Status != *req.Status {
@@ -289,8 +289,8 @@ func (service *TicketService) UpdateTicket(ctx context.Context, user domain.User
 	}
 
 	if statusChanged {
-		historyTitle = "Status Updated"
-		historyDesc = fmt.Sprintf("Status diperbarui dari %s ke %s", statusLabel(previousStatus), statusLabel(ticket.Status))
+		historyTitle = "Status Diperbarui"
+		historyDesc = statusHistoryDescription(ticket.Status)
 	}
 
 	ticket.UpdatedAt = service.now()
@@ -582,11 +582,24 @@ func statusChangeNotification(
 	}
 	return "Status Tiket Diperbarui",
 		fmt.Sprintf(
-			"Tiket %s berubah dari %s ke %s.",
+			"Status tiket %s diperbarui dari %s menjadi %s.",
 			ticketNumber,
 			statusLabel(previous),
 			statusLabel(current),
 		)
+}
+
+func statusHistoryDescription(status domain.TicketStatus) string {
+	switch status {
+	case domain.StatusInProgress:
+		return "Tiket sedang ditangani"
+	case domain.StatusResolved:
+		return "Tiket telah selesai ditangani"
+	case domain.StatusWaiting:
+		return "Tiket akan segera ditangani"
+	default:
+		return "Status tiket diperbarui"
+	}
 }
 
 func (service *TicketService) mapTickets(
