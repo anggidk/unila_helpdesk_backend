@@ -468,31 +468,7 @@ func (service *ReportService) TemplatesByCategory(categoryID string) ([]domain.S
 		return nil, err
 	}
 
-	templateIDs := map[string]struct{}{}
-	if category.SurveyTemplateID != "" {
-		templateIDs[category.SurveyTemplateID] = struct{}{}
-	}
-
-	usedIDs, err := service.reports.ListUsedTemplateIDsByCategory(categoryID)
-	if err != nil {
-		return nil, err
-	}
-	for _, id := range usedIDs {
-		if id != "" {
-			templateIDs[id] = struct{}{}
-		}
-	}
-
-	if len(templateIDs) == 0 {
-		return []domain.SurveyTemplateDTO{}, nil
-	}
-
-	ids := make([]string, 0, len(templateIDs))
-	for id := range templateIDs {
-		ids = append(ids, id)
-	}
-
-	templates, err := service.reports.ListTemplatesByIDsWithQuestions(ids)
+	templates, err := service.surveys.ListTemplates()
 	if err != nil {
 		return nil, err
 	}

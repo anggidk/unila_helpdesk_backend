@@ -12,17 +12,15 @@ import (
 )
 
 type SurveyService struct {
-	surveys    *repository.SurveyRepository
-	tickets    *repository.TicketRepository
-	categories *repository.CategoryRepository
-	now        func() time.Time
+	surveys *repository.SurveyRepository
+	tickets *repository.TicketRepository
+	now     func() time.Time
 }
 
 type SurveyTemplateRequest struct {
 	Title       string                  `json:"title"`
 	Description string                  `json:"description"`
 	Framework   string                  `json:"framework"`
-	CategoryID  string                  `json:"categoryId"`
 	Questions   []SurveyQuestionRequest `json:"questions"`
 }
 
@@ -41,13 +39,11 @@ type SurveyResponseRequest struct {
 func NewSurveyService(
 	surveys *repository.SurveyRepository,
 	tickets *repository.TicketRepository,
-	categories *repository.CategoryRepository,
 ) *SurveyService {
 	return &SurveyService{
-		surveys:    surveys,
-		tickets:    tickets,
-		categories: categories,
-		now:        time.Now,
+		surveys: surveys,
+		tickets: tickets,
+		now:     time.Now,
 	}
 }
 
@@ -71,16 +67,12 @@ func (service *SurveyService) CreateTemplate(req SurveyTemplateRequest) (domain.
 	if strings.TrimSpace(req.Title) == "" {
 		return domain.SurveyTemplateDTO{}, errors.New("judul template wajib diisi")
 	}
-	if strings.TrimSpace(req.CategoryID) == "" {
-		return domain.SurveyTemplateDTO{}, errors.New("kategori wajib diisi")
-	}
 
 	template := domain.SurveyTemplate{
 		ID:          util.NewID(12),
 		Title:       strings.TrimSpace(req.Title),
 		Description: strings.TrimSpace(req.Description),
 		Framework:   strings.TrimSpace(req.Framework),
-		CategoryID:  req.CategoryID,
 		CreatedAt:   service.now(),
 		UpdatedAt:   service.now(),
 	}
@@ -109,9 +101,6 @@ func (service *SurveyService) CreateTemplate(req SurveyTemplateRequest) (domain.
 	if err := service.surveys.CreateTemplate(&template); err != nil {
 		return domain.SurveyTemplateDTO{}, err
 	}
-	if err := service.categories.BindTemplateToCategory(template.CategoryID, template.ID); err != nil {
-		return domain.SurveyTemplateDTO{}, err
-	}
 	return mapSurveyTemplate(template), nil
 }
 
@@ -122,9 +111,6 @@ func (service *SurveyService) UpdateTemplate(templateID string, req SurveyTempla
 	if strings.TrimSpace(req.Title) == "" {
 		return domain.SurveyTemplateDTO{}, errors.New("judul template wajib diisi")
 	}
-	if strings.TrimSpace(req.CategoryID) == "" {
-		return domain.SurveyTemplateDTO{}, errors.New("kategori wajib diisi")
-	}
 
 	template, err := service.surveys.FindByID(templateID)
 	if err != nil {
@@ -134,7 +120,6 @@ func (service *SurveyService) UpdateTemplate(templateID string, req SurveyTempla
 	template.Title = strings.TrimSpace(req.Title)
 	template.Description = strings.TrimSpace(req.Description)
 	template.Framework = strings.TrimSpace(req.Framework)
-	template.CategoryID = req.CategoryID
 	template.UpdatedAt = service.now()
 
 	questions := make([]domain.SurveyQuestion, 0, len(req.Questions))
@@ -159,9 +144,6 @@ func (service *SurveyService) UpdateTemplate(templateID string, req SurveyTempla
 	template.Questions = questions
 
 	if err := service.surveys.ReplaceTemplate(template); err != nil {
-		return domain.SurveyTemplateDTO{}, err
-	}
-	if err := service.categories.BindTemplateToCategory(template.CategoryID, template.ID); err != nil {
 		return domain.SurveyTemplateDTO{}, err
 	}
 	return mapSurveyTemplate(*template), nil
@@ -301,7 +283,6 @@ func mapSurveyTemplate(template domain.SurveyTemplate) domain.SurveyTemplateDTO 
 		Title:       template.Title,
 		Description: template.Description,
 		Framework:   template.Framework,
-		CategoryID:  template.CategoryID,
 		Questions:   questions,
 		CreatedAt:   template.CreatedAt,
 		UpdatedAt:   template.UpdatedAt,

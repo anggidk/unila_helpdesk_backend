@@ -2,10 +2,12 @@ package repository
 
 import (
 	"strings"
+	"time"
 
 	"unila_helpdesk_backend/internal/domain"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type CategoryRepository struct {
@@ -18,7 +20,12 @@ func NewCategoryRepository(db *gorm.DB) *CategoryRepository {
 
 func (repo *CategoryRepository) List() ([]domain.ServiceCategory, error) {
 	var categories []domain.ServiceCategory
-	if err := repo.db.Order("name asc").Find(&categories).Error; err != nil {
+	if err := repo.db.
+		Table("service_categories sc").
+		Select("sc.id, sc.name, sc.guest_allowed, ct.template_id AS survey_template_id").
+		Joins("LEFT JOIN category_templates ct ON ct.category_id = sc.id").
+		Order("sc.name asc").
+		Scan(&categories).Error; err != nil {
 		return nil, err
 	}
 	return categories, nil
@@ -26,7 +33,12 @@ func (repo *CategoryRepository) List() ([]domain.ServiceCategory, error) {
 
 func (repo *CategoryRepository) FindByID(id string) (*domain.ServiceCategory, error) {
 	var category domain.ServiceCategory
-	if err := repo.db.First(&category, "id = ?", id).Error; err != nil {
+	if err := repo.db.
+		Table("service_categories sc").
+		Select("sc.id, sc.name, sc.guest_allowed, ct.template_id AS survey_template_id").
+		Joins("LEFT JOIN category_templates ct ON ct.category_id = sc.id").
+		Where("sc.id = ?", id).
+		First(&category).Error; err != nil {
 		return nil, err
 	}
 	return &category, nil
@@ -48,44 +60,34 @@ func (repo *CategoryRepository) Upsert(category domain.ServiceCategory) error {
 			"guest_allowed": category.GuestAllowed,
 		}).Error
 	}
-
-	var surveyTemplateID any = nil
-	if strings.TrimSpace(category.SurveyTemplateID) != "" {
-		surveyTemplateID = strings.TrimSpace(category.SurveyTemplateID)
-	}
 	return repo.db.Model(&domain.ServiceCategory{}).Create(map[string]any{
-		"id":                 category.ID,
-		"name":               category.Name,
-		"guest_allowed":      category.GuestAllowed,
-		"survey_template_id": surveyTemplateID,
+		"id":            category.ID,
+		"name":          category.Name,
+		"guest_allowed": category.GuestAllowed,
 	}).Error
 }
 
 func (repo *CategoryRepository) UpdateTemplate(categoryID string, templateID string) error {
-	var value any = nil
-	if strings.TrimSpace(templateID) != "" {
-		value = strings.TrimSpace(templateID)
+	cleanCategoryID := strings.TrimSpace(categoryID)
+	cleanTemplateID := strings.TrimSpace(templateID)
+	if cleanCategoryID == "" {
+		return gorm.ErrInvalidData
 	}
-	return repo.db.Model(&domain.ServiceCategory{}).
-		Where("id = ?", categoryID).
-		Update("survey_template_id", value).Error
+	if cleanTemplateID == "" {
+		return repo.db.Where("category_id = ?", cleanCategoryID).
+			Delete(&domain.CategoryTemplate{}).Error
+	}
+	record := domain.CategoryTemplate{
+		CategoryID: cleanCategoryID,
+		TemplateID: cleanTemplateID,
+		AssignedAt: time.Now(),
+	}
+	return repo.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "category_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"template_id", "assigned_at"}),
+	}).Create(&record).Error
 }
 
 func (repo *CategoryRepository) BindTemplateToCategory(categoryID string, templateID string) error {
-	cleanCategoryID := strings.TrimSpace(categoryID)
-	cleanTemplateID := strings.TrimSpace(templateID)
-	if cleanCategoryID == "" || cleanTemplateID == "" {
-		return gorm.ErrInvalidData
-	}
-
-	result := repo.db.Model(&domain.ServiceCategory{}).
-		Where("id = ?", cleanCategoryID).
-		Update("survey_template_id", cleanTemplateID)
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
+	return repo.UpdateTemplate(categoryID, templateID)
 }

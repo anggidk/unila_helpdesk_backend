@@ -60,7 +60,13 @@ type ServiceCategory struct {
 	ID               string `gorm:"primaryKey;size:6"`
 	Name             string `gorm:"size:120"`
 	GuestAllowed     bool
-	SurveyTemplateID string `gorm:"size:12"`
+	SurveyTemplateID string `gorm:"column:survey_template_id;->"`
+}
+
+type CategoryTemplate struct {
+	CategoryID string `gorm:"primaryKey;size:6"`
+	TemplateID string `gorm:"size:12;index"`
+	AssignedAt time.Time
 }
 
 type Ticket struct {
@@ -109,7 +115,6 @@ type SurveyTemplate struct {
 	Title       string           `gorm:"size:160"`
 	Description string           `gorm:"type:text"`
 	Framework   string           `gorm:"size:80"`
-	CategoryID  string           `gorm:"size:6;index"`
 	Questions   []SurveyQuestion `gorm:"foreignKey:TemplateID"`
 	CreatedAt   time.Time
 	UpdatedAt   time.Time

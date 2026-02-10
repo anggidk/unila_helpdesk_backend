@@ -49,16 +49,13 @@ func (repo *SurveyRepository) ListTemplates() ([]domain.SurveyTemplate, error) {
 }
 
 func (repo *SurveyRepository) FindByCategory(categoryID string) (*domain.SurveyTemplate, error) {
-	var category domain.ServiceCategory
-	if err := repo.db.First(&category, "id = ?", categoryID).Error; err != nil {
-		return nil, err
-	}
-	if category.SurveyTemplateID == "" {
+	var mapping domain.CategoryTemplate
+	if err := repo.db.First(&mapping, "category_id = ?", categoryID).Error; err != nil {
 		return nil, gorm.ErrRecordNotFound
 	}
 	var template domain.SurveyTemplate
 	if err := repo.db.Preload("Questions").
-		First(&template, "id = ?", category.SurveyTemplateID).Error; err != nil {
+		First(&template, "id = ?", mapping.TemplateID).Error; err != nil {
 		return nil, err
 	}
 	return &template, nil
@@ -82,7 +79,6 @@ func (repo *SurveyRepository) ReplaceTemplate(template *domain.SurveyTemplate) e
 			"title":       template.Title,
 			"description": template.Description,
 			"framework":   template.Framework,
-			"category_id": template.CategoryID,
 			"updated_at":  template.UpdatedAt,
 		}
 		result := tx.Model(&domain.SurveyTemplate{}).Where("id = ?", template.ID).Updates(updates)
