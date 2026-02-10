@@ -7,22 +7,19 @@ import (
 	"unila_helpdesk_backend/internal/domain"
 )
 
-func scoreFromQuestionValue(value interface{}, questionType domain.SurveyQuestionType) (float64, bool) {
+func scoreFromQuestionValue(
+	value interface{},
+	questionType domain.SurveyQuestionType,
+) (float64, bool) {
 	switch questionType {
 	case domain.QuestionYesNo:
 		return scoreFromYesNo(value)
-	case domain.QuestionLikert:
-		return scoreFromScale(value, 5)
-	case domain.QuestionLikertQuality:
-		return scoreFromScale(value, 5)
-	case domain.QuestionLikert3Puas:
-		return scoreFromScale(value, 3)
 	case domain.QuestionLikert3:
 		return scoreFromScale(value, 3)
-	case domain.QuestionLikert4Puas:
-		return scoreFromScale(value, 4)
 	case domain.QuestionLikert4:
 		return scoreFromScale(value, 4)
+	case domain.QuestionLikert5:
+		return scoreFromScale(value, 5)
 	default:
 		return 0, false
 	}

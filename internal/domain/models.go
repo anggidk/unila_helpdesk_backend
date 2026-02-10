@@ -34,12 +34,9 @@ const (
 )
 
 const (
-	QuestionLikert         SurveyQuestionType = "likert"
-	QuestionLikertQuality  SurveyQuestionType = "likertQuality"
-	QuestionLikert3Puas    SurveyQuestionType = "likert3Puas"
 	QuestionLikert3        SurveyQuestionType = "likert3"
-	QuestionLikert4Puas    SurveyQuestionType = "likert4Puas"
 	QuestionLikert4        SurveyQuestionType = "likert4"
+	QuestionLikert5        SurveyQuestionType = "likert5"
 	QuestionYesNo          SurveyQuestionType = "yesNo"
 	QuestionMultipleChoice SurveyQuestionType = "multipleChoice"
 	QuestionText           SurveyQuestionType = "text"

@@ -326,9 +326,9 @@ func (service *ReportService) SurveySatisfaction(
 		return nil, err
 	}
 	itemsByResponse := groupResponseItemsByResponseID(responseItems)
-	questionTypes := make(map[string]domain.SurveyQuestionType, len(template.Questions))
+	questionMetas := make(map[string]domain.SurveyQuestionType, len(template.Questions))
 	for _, question := range template.Questions {
-		questionTypes[question.ID] = question.Type
+		questionMetas[question.ID] = question.Type
 	}
 
 	sums := make(map[string]float64)
@@ -336,7 +336,7 @@ func (service *ReportService) SurveySatisfaction(
 	answerCounts := make(map[string]int)
 	for _, response := range responses {
 		for _, item := range itemsByResponse[response.ID] {
-			questionType, ok := questionTypes[item.QuestionID]
+			questionType, ok := questionMetas[item.QuestionID]
 			if !ok {
 				continue
 			}
