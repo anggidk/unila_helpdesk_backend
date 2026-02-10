@@ -85,3 +85,20 @@ func normalizeToHundred(value float64, max int) float64 {
 	}
 	return normalized
 }
+
+func scoreToFivePoint(score float64) float64 {
+	if score <= 0 {
+		return 0
+	}
+	if score <= 5 {
+		return score
+	}
+	normalized := score / 20
+	if normalized < 0 {
+		return 0
+	}
+	if normalized > 5 {
+		return 5
+	}
+	return normalized
+}

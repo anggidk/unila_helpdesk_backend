@@ -261,7 +261,7 @@ func (service *SurveyService) ListResponsesPaged(
 			Category:   row.CategoryName,
 			TemplateID: row.TemplateID,
 			Template:   row.TemplateTitle,
-			Score:      row.Score,
+			Score:      scoreToFivePoint(row.Score),
 			CreatedAt:  row.CreatedAt,
 		})
 	}

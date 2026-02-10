@@ -96,7 +96,7 @@ func (service *ReportService) CohortReport(period string, periods int) ([]domain
 			Label:        formatCohortLabel(cohortStart, unit),
 			Users:        cohortSize,
 			Retention:    retention,
-			AvgScore:     avgScore,
+			AvgScore:     scoreToFivePoint(avgScore),
 			ResponseRate: responseRate,
 		})
 	}
@@ -252,7 +252,7 @@ func (service *ReportService) DashboardSummary() (domain.DashboardSummaryDTO, er
 		TotalTickets:       int(totalTickets),
 		OpenTickets:        int(openTickets),
 		ResolvedThisPeriod: int(resolvedThisMonth),
-		AvgRating:          avgScore,
+		AvgRating:          scoreToFivePoint(avgScore),
 	}, nil
 }
 
@@ -284,7 +284,7 @@ func (service *ReportService) ServiceSatisfactionSummary(period string, periods 
 		result = append(result, domain.ServiceSatisfactionDTO{
 			CategoryID: row.CategoryID,
 			Label:      label,
-			AvgScore:   row.AvgScore,
+			AvgScore:   scoreToFivePoint(row.AvgScore),
 			Responses:  row.Responses,
 			Percentage: percentage,
 		})
@@ -353,7 +353,7 @@ func (service *ReportService) SurveySatisfaction(
 			QuestionID: question.ID,
 			Question:   question.Text,
 			Type:       string(question.Type),
-			AvgScore:   avgScore,
+			AvgScore:   scoreToFivePoint(avgScore),
 			Responses:  responsesCount,
 		})
 	}
@@ -419,7 +419,7 @@ func (service *ReportService) SurveySatisfactionExport(
 			ID:        response.ID,
 			TicketID:  response.TicketID,
 			UserID:    response.UserID,
-			Score:     response.Score,
+			Score:     scoreToFivePoint(response.Score),
 			CreatedAt: response.CreatedAt,
 			Answers:   response.Answers,
 		})

@@ -517,7 +517,7 @@ func (service *TicketService) toTicketDTO(
 		Attachments:    attachmentURLs,
 		History:        history,
 		SurveyRequired: ticket.SurveyRequired,
-		SurveyScore:    surveyScore,
+		SurveyScore:    scoreToFivePoint(surveyScore),
 	}
 	if ticket.Phone != nil {
 		result.Phone = *ticket.Phone
