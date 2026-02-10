@@ -6,6 +6,7 @@ import (
 	"unila_helpdesk_backend/internal/domain"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type SurveyRepository struct {
@@ -91,13 +92,27 @@ func (repo *SurveyRepository) ReplaceTemplate(template *domain.SurveyTemplate) e
 		if result.RowsAffected == 0 {
 			return gorm.ErrRecordNotFound
 		}
-		if err := tx.Where("template_id = ?", template.ID).Delete(&domain.SurveyQuestion{}).Error; err != nil {
-			return err
-		}
+
+		incomingQuestionIDs := make([]string, 0, len(template.Questions))
 		if len(template.Questions) > 0 {
-			if err := tx.Create(&template.Questions).Error; err != nil {
-				return err
+			for _, question := range template.Questions {
+				incomingQuestionIDs = append(incomingQuestionIDs, question.ID)
+				if err := tx.Clauses(clause.OnConflict{
+					Columns:   []clause.Column{{Name: "id"}},
+					DoUpdates: clause.AssignmentColumns([]string{"template_id", "text", "type", "options"}),
+				}).Create(&question).Error; err != nil {
+					return err
+				}
 			}
+		}
+
+		deleteQuery := tx.Where("template_id = ?", template.ID).
+			Where("id NOT IN (SELECT DISTINCT question_id FROM survey_response_items)")
+		if len(incomingQuestionIDs) > 0 {
+			deleteQuery = deleteQuery.Where("id NOT IN ?", incomingQuestionIDs)
+		}
+		if err := deleteQuery.Delete(&domain.SurveyQuestion{}).Error; err != nil {
+			return err
 		}
 		return nil
 	})
@@ -119,8 +134,21 @@ func (repo *SurveyRepository) DeleteTemplate(templateID string) error {
 	})
 }
 
-func (repo *SurveyRepository) SaveResponse(response *domain.SurveyResponse) error {
-	return repo.db.Create(response).Error
+func (repo *SurveyRepository) SaveResponse(
+	response *domain.SurveyResponse,
+	items []domain.SurveyResponseItem,
+) error {
+	return repo.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(response).Error; err != nil {
+			return err
+		}
+		if len(items) > 0 {
+			if err := tx.Create(&items).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (repo *SurveyRepository) HasResponse(ticketID string, userID string) (bool, error) {

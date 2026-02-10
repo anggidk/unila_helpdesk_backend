@@ -321,23 +321,29 @@ func (service *ReportService) SurveySatisfaction(
 		return nil, err
 	}
 
+	responseItems, err := service.reports.ListResponseItemsByResponseIDs(surveyResponseIDs(responses))
+	if err != nil {
+		return nil, err
+	}
+	itemsByResponse := groupResponseItemsByResponseID(responseItems)
+	questionTypes := make(map[string]domain.SurveyQuestionType, len(template.Questions))
+	for _, question := range template.Questions {
+		questionTypes[question.ID] = question.Type
+	}
+
 	sums := make(map[string]float64)
 	scoreCounts := make(map[string]int)
 	answerCounts := make(map[string]int)
 	for _, response := range responses {
-		var answers map[string]interface{}
-		if err := json.Unmarshal(response.Answers, &answers); err != nil {
-			continue
-		}
-		for _, question := range template.Questions {
-			value, ok := answers[question.ID]
+		for _, item := range itemsByResponse[response.ID] {
+			questionType, ok := questionTypes[item.QuestionID]
 			if !ok {
 				continue
 			}
-			answerCounts[question.ID]++
-			if score, ok := scoreFromQuestionValue(value, question.Type); ok {
-				sums[question.ID] += score
-				scoreCounts[question.ID]++
+			answerCounts[item.QuestionID]++
+			if score, ok := scoreFromResponseItem(item, questionType); ok {
+				sums[item.QuestionID] += score
+				scoreCounts[item.QuestionID]++
 			}
 		}
 	}
@@ -404,6 +410,12 @@ func (service *ReportService) SurveySatisfactionExport(
 		return nil, err
 	}
 
+	responseItems, err := service.reports.ListResponseItemsByResponseIDs(surveyResponseIDs(responses))
+	if err != nil {
+		return nil, err
+	}
+	itemsByResponse := groupResponseItemsByResponseID(responseItems)
+
 	questions := make([]domain.SurveySatisfactionExportQuestionDTO, 0, len(template.Questions))
 	for _, question := range template.Questions {
 		questions = append(questions, domain.SurveySatisfactionExportQuestionDTO{
@@ -415,13 +427,17 @@ func (service *ReportService) SurveySatisfactionExport(
 
 	responseDTOs := make([]domain.SurveySatisfactionExportResponseDTO, 0, len(responses))
 	for _, response := range responses {
+		answersPayload, err := buildAnswerPayload(itemsByResponse[response.ID])
+		if err != nil {
+			return nil, err
+		}
 		responseDTOs = append(responseDTOs, domain.SurveySatisfactionExportResponseDTO{
 			ID:        response.ID,
 			TicketID:  response.TicketID,
 			UserID:    response.UserID,
 			Score:     scoreToFivePoint(response.Score),
 			CreatedAt: response.CreatedAt,
-			Answers:   response.Answers,
+			Answers:   answersPayload,
 		})
 	}
 
@@ -648,4 +664,54 @@ func (service *ReportService) resolveCategoryName(categoryID string) string {
 		return category.Name
 	}
 	return categoryID
+}
+
+func surveyResponseIDs(responses []domain.SurveyResponse) []string {
+	ids := make([]string, 0, len(responses))
+	for _, response := range responses {
+		ids = append(ids, response.ID)
+	}
+	return ids
+}
+
+func groupResponseItemsByResponseID(
+	items []domain.SurveyResponseItem,
+) map[string][]domain.SurveyResponseItem {
+	grouped := make(map[string][]domain.SurveyResponseItem, len(items))
+	for _, item := range items {
+		grouped[item.ResponseID] = append(grouped[item.ResponseID], item)
+	}
+	return grouped
+}
+
+func scoreFromResponseItem(
+	item domain.SurveyResponseItem,
+	questionType domain.SurveyQuestionType,
+) (float64, bool) {
+	if item.ScoreValue != nil {
+		return *item.ScoreValue, true
+	}
+	if len(item.AnswerValue) == 0 {
+		return 0, false
+	}
+	var value interface{}
+	if err := json.Unmarshal(item.AnswerValue, &value); err != nil {
+		return 0, false
+	}
+	return scoreFromQuestionValue(value, questionType)
+}
+
+func buildAnswerPayload(items []domain.SurveyResponseItem) ([]byte, error) {
+	answers := make(map[string]interface{}, len(items))
+	for _, item := range items {
+		if len(item.AnswerValue) == 0 {
+			continue
+		}
+		var value interface{}
+		if err := json.Unmarshal(item.AnswerValue, &value); err != nil {
+			return nil, err
+		}
+		answers[item.QuestionID] = value
+	}
+	return json.Marshal(answers)
 }

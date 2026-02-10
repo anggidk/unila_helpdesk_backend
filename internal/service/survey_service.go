@@ -200,26 +200,27 @@ func (service *SurveyService) SubmitSurvey(user domain.User, req SurveyResponseR
 		return errors.New("survey sudah diisi")
 	}
 
-	payload, err := json.Marshal(req.Answers)
-	if err != nil {
-		return err
-	}
-
 	template, err := service.surveys.FindByCategory(ticket.CategoryID)
 	if err != nil || template == nil || strings.TrimSpace(template.ID) == "" {
 		return errors.New("template survei untuk kategori tiket tidak ditemukan")
 	}
 
+	responseID := util.NewID(32)
+	createdAt := service.now()
+	items, err := buildSurveyResponseItems(responseID, req.Answers, template, createdAt)
+	if err != nil {
+		return err
+	}
+
 	response := domain.SurveyResponse{
-		ID:         util.NewID(32),
+		ID:         responseID,
 		TicketID:   ticket.ID,
 		UserID:     user.ID,
 		TemplateID: template.ID,
-		Answers:    payload,
 		Score:      calculateSurveyScore(req.Answers, template),
-		CreatedAt:  service.now(),
+		CreatedAt:  createdAt,
 	}
-	if err := service.surveys.SaveResponse(&response); err != nil {
+	if err := service.surveys.SaveResponse(&response, items); err != nil {
 		return err
 	}
 
@@ -330,4 +331,40 @@ func calculateSurveyScore(answers map[string]interface{}, template *domain.Surve
 		return 0
 	}
 	return total / float64(count)
+}
+
+func buildSurveyResponseItems(
+	responseID string,
+	answers map[string]interface{},
+	template *domain.SurveyTemplate,
+	createdAt time.Time,
+) ([]domain.SurveyResponseItem, error) {
+	if len(answers) == 0 || template == nil || len(template.Questions) == 0 {
+		return []domain.SurveyResponseItem{}, nil
+	}
+	items := make([]domain.SurveyResponseItem, 0, len(template.Questions))
+	for _, question := range template.Questions {
+		value, ok := answers[question.ID]
+		if !ok {
+			continue
+		}
+		payload, err := json.Marshal(value)
+		if err != nil {
+			return nil, err
+		}
+
+		item := domain.SurveyResponseItem{
+			ID:          util.NewID(32),
+			ResponseID:  responseID,
+			QuestionID:  question.ID,
+			AnswerValue: payload,
+			CreatedAt:   createdAt,
+		}
+		if score, ok := scoreFromQuestionValue(value, question.Type); ok {
+			scoreValue := score
+			item.ScoreValue = &scoreValue
+		}
+		items = append(items, item)
+	}
+	return items, nil
 }

@@ -168,6 +168,20 @@ func (repo *ReportRepository) ListSurveyResponsesByTicketCategoryAndTemplate(
 	return responses, nil
 }
 
+func (repo *ReportRepository) ListResponseItemsByResponseIDs(responseIDs []string) ([]domain.SurveyResponseItem, error) {
+	if len(responseIDs) == 0 {
+		return []domain.SurveyResponseItem{}, nil
+	}
+	var items []domain.SurveyResponseItem
+	if err := repo.db.Model(&domain.SurveyResponseItem{}).
+		Where("response_id IN ?", responseIDs).
+		Order("created_at asc").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (repo *ReportRepository) ListUsedTemplateIDsByCategory(categoryID string) ([]string, error) {
 	usedIDs := make([]string, 0)
 	if err := repo.db.Model(&domain.SurveyResponse{}).

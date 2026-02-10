@@ -171,8 +171,16 @@ CREATE TABLE IF NOT EXISTS public.survey_responses (
     user_id varchar(10),
     ticket_id varchar(32),
     template_id varchar(12),
-    answers jsonb,
     score numeric,
+    created_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS public.survey_response_items (
+    id varchar(32) PRIMARY KEY,
+    response_id varchar(32),
+    question_id varchar(32),
+    answer_value jsonb,
+    score_value numeric,
     created_at timestamptz
 );
 
@@ -195,6 +203,10 @@ ALTER TABLE public.survey_responses
     ALTER COLUMN id TYPE varchar(32),
     ALTER COLUMN ticket_id TYPE varchar(32),
     ALTER COLUMN template_id TYPE varchar(12);
+ALTER TABLE public.survey_response_items
+    ALTER COLUMN id TYPE varchar(32),
+    ALTER COLUMN response_id TYPE varchar(32),
+    ALTER COLUMN question_id TYPE varchar(32);
 
 CREATE TABLE IF NOT EXISTS public.notifications (
     id varchar(64) PRIMARY KEY,
@@ -295,6 +307,20 @@ BEGIN
             ON UPDATE NO ACTION ON DELETE CASCADE;
     END IF;
 
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_survey_response_items_response_id') THEN
+        ALTER TABLE public.survey_response_items
+            ADD CONSTRAINT fk_survey_response_items_response_id
+            FOREIGN KEY (response_id) REFERENCES public.survey_responses(id)
+            ON UPDATE NO ACTION ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_survey_response_items_question_id') THEN
+        ALTER TABLE public.survey_response_items
+            ADD CONSTRAINT fk_survey_response_items_question_id
+            FOREIGN KEY (question_id) REFERENCES public.survey_questions(id)
+            ON UPDATE NO ACTION ON DELETE NO ACTION;
+    END IF;
+
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_survey_templates_category_id') THEN
         ALTER TABLE public.survey_templates
             ADD CONSTRAINT fk_survey_templates_category_id
@@ -360,6 +386,9 @@ CREATE INDEX IF NOT EXISTS ix_ticket_histories_ticket_id_created_at ON public.ti
 CREATE INDEX IF NOT EXISTS ix_survey_responses_ticket_id ON public.survey_responses(ticket_id);
 CREATE INDEX IF NOT EXISTS ix_survey_responses_user_id ON public.survey_responses(user_id);
 CREATE INDEX IF NOT EXISTS ix_survey_responses_template_id ON public.survey_responses(template_id);
+CREATE INDEX IF NOT EXISTS ix_survey_response_items_response_id ON public.survey_response_items(response_id);
+CREATE INDEX IF NOT EXISTS ix_survey_response_items_question_id ON public.survey_response_items(question_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_survey_response_items_response_question ON public.survey_response_items(response_id, question_id);
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_user_id ON public.refresh_tokens(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_refresh_tokens_token_hash ON public.refresh_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_expires_at ON public.refresh_tokens(expires_at);

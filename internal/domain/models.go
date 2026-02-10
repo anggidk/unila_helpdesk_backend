@@ -128,13 +128,22 @@ type SurveyQuestion struct {
 }
 
 type SurveyResponse struct {
-	ID         string         `gorm:"primaryKey;size:32"`
-	TicketID   string         `gorm:"size:32;index"`
-	UserID     string         `gorm:"size:10;index"`
-	TemplateID string         `gorm:"size:12;index"`
-	Answers    datatypes.JSON `gorm:"type:jsonb"`
-	Score      float64        `gorm:"default:0"`
+	ID         string  `gorm:"primaryKey;size:32"`
+	TicketID   string  `gorm:"size:32;index"`
+	UserID     string  `gorm:"size:10;index"`
+	TemplateID string  `gorm:"size:12;index"`
+	Score      float64 `gorm:"default:0"`
 	CreatedAt  time.Time
+	Items      []SurveyResponseItem `gorm:"foreignKey:ResponseID"`
+}
+
+type SurveyResponseItem struct {
+	ID          string         `gorm:"primaryKey;size:32"`
+	ResponseID  string         `gorm:"size:32;index"`
+	QuestionID  string         `gorm:"size:32;index"`
+	AnswerValue datatypes.JSON `gorm:"type:jsonb"`
+	ScoreValue  *float64
+	CreatedAt   time.Time
 }
 
 type Notification struct {
