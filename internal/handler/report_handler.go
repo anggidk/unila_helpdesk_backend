@@ -28,6 +28,7 @@ func (handler *ReportHandler) RegisterRoutes(admin *gin.RouterGroup) {
 	admin.GET("/reports/summary", handler.dashboardSummary)
 	admin.GET("/reports", handler.serviceTrends)
 	admin.GET("/reports/satisfaction-summary", handler.satisfactionSummary)
+	admin.GET("/reports/categories", handler.surveyCategories)
 	admin.GET("/reports/cohort", handler.cohortReport)
 	admin.GET("/reports/satisfaction", handler.surveySatisfaction)
 	admin.GET("/reports/satisfaction/export", handler.surveySatisfactionExport)
@@ -174,6 +175,15 @@ func (handler *ReportHandler) templatesByCategory(c *gin.Context) {
 		return
 	}
 	respondOK(c, templates)
+}
+
+func (handler *ReportHandler) surveyCategories(c *gin.Context) {
+	categories, err := handler.reports.SurveyCategoriesWithResponses()
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondOK(c, categories)
 }
 
 func (handler *ReportHandler) usageCohort(c *gin.Context) {

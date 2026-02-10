@@ -188,31 +188,6 @@ CREATE TABLE IF NOT EXISTS public.survey_response_items (
     created_at timestamptz
 );
 
-ALTER TABLE public.tickets
-    ALTER COLUMN id TYPE varchar(32);
-ALTER TABLE public.ticket_histories
-    ALTER COLUMN id TYPE varchar(64),
-    ALTER COLUMN ticket_id TYPE varchar(32);
-ALTER TABLE public.attachments
-    ALTER COLUMN id TYPE varchar(32),
-    ALTER COLUMN ticket_id TYPE varchar(32);
-ALTER TABLE public.survey_templates
-    ALTER COLUMN id TYPE varchar(12);
-ALTER TABLE public.category_templates
-    ALTER COLUMN category_id TYPE varchar(6),
-    ALTER COLUMN template_id TYPE varchar(12);
-ALTER TABLE public.survey_questions
-    ALTER COLUMN id TYPE varchar(32),
-    ALTER COLUMN template_id TYPE varchar(12);
-ALTER TABLE public.survey_responses
-    ALTER COLUMN id TYPE varchar(32),
-    ALTER COLUMN ticket_id TYPE varchar(32),
-    ALTER COLUMN template_id TYPE varchar(12);
-ALTER TABLE public.survey_response_items
-    ALTER COLUMN id TYPE varchar(32),
-    ALTER COLUMN response_id TYPE varchar(32),
-    ALTER COLUMN question_id TYPE varchar(32);
-
 CREATE TABLE IF NOT EXISTS public.notifications (
     id varchar(64) PRIMARY KEY,
     user_id varchar(10),
@@ -238,23 +213,6 @@ CREATE TABLE IF NOT EXISTS public.refresh_tokens (
     expires_at timestamptz,
     created_at timestamptz
 );
-
-ALTER TABLE public.notifications
-    ALTER COLUMN id TYPE varchar(64),
-    ALTER COLUMN ticket_id TYPE varchar(32);
-ALTER TABLE public.fcm_tokens
-    ALTER COLUMN id TYPE varchar(64);
-ALTER TABLE public.refresh_tokens
-    ALTER COLUMN id TYPE varchar(64);
-
-ALTER TABLE public.service_categories
-    DROP CONSTRAINT IF EXISTS fk_service_categories_survey_template_id;
-ALTER TABLE public.survey_templates
-    DROP CONSTRAINT IF EXISTS fk_survey_templates_category_id;
-ALTER TABLE public.service_categories
-    DROP COLUMN IF EXISTS survey_template_id;
-ALTER TABLE public.survey_templates
-    DROP COLUMN IF EXISTS category_id;
 
 DO $$
 BEGIN

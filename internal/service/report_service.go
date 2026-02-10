@@ -463,27 +463,59 @@ func (service *ReportService) TemplatesByCategory(categoryID string) ([]domain.S
 		return nil, errors.New("categoryId wajib diisi")
 	}
 
-	category, err := service.categories.FindByID(categoryID)
+	usedIDs, err := service.reports.ListUsedTemplateIDsByCategory(categoryID)
 	if err != nil {
 		return nil, err
 	}
+	if len(usedIDs) == 0 {
+		return []domain.SurveyTemplateDTO{}, nil
+	}
 
-	templates, err := service.surveys.ListTemplates()
+	templates, err := service.reports.ListTemplatesByIDsWithQuestions(usedIDs)
 	if err != nil {
 		return nil, err
 	}
-
 	sort.Slice(templates, func(i, j int) bool {
-		if templates[i].ID == category.SurveyTemplateID {
-			return true
-		}
-		if templates[j].ID == category.SurveyTemplateID {
-			return false
-		}
 		return templates[i].UpdatedAt.After(templates[j].UpdatedAt)
 	})
 
 	return mapSurveyTemplates(templates), nil
+}
+
+func (service *ReportService) SurveyCategoriesWithResponses() ([]domain.ServiceCategoryDTO, error) {
+	usedIDs, err := service.reports.ListUsedCategoryIDs()
+	if err != nil {
+		return nil, err
+	}
+	if len(usedIDs) == 0 {
+		return []domain.ServiceCategoryDTO{}, nil
+	}
+
+	usedSet := make(map[string]struct{}, len(usedIDs))
+	for _, id := range usedIDs {
+		if strings.TrimSpace(id) != "" {
+			usedSet[id] = struct{}{}
+		}
+	}
+
+	categories, err := service.categories.List()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]domain.ServiceCategoryDTO, 0)
+	for _, item := range categories {
+		if _, ok := usedSet[item.ID]; !ok {
+			continue
+		}
+		result = append(result, domain.ServiceCategoryDTO{
+			ID:           item.ID,
+			Name:         item.Name,
+			GuestAllowed: item.GuestAllowed,
+			TemplateID:   item.SurveyTemplateID,
+		})
+	}
+	return result, nil
 }
 
 func (service *ReportService) UsageCohort(period string, periods int) ([]domain.UsageCohortRowDTO, error) {

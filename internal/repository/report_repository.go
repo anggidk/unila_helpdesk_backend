@@ -194,6 +194,18 @@ func (repo *ReportRepository) ListUsedTemplateIDsByCategory(categoryID string) (
 	return usedIDs, nil
 }
 
+func (repo *ReportRepository) ListUsedCategoryIDs() ([]string, error) {
+	usedIDs := make([]string, 0)
+	if err := repo.db.Model(&domain.SurveyResponse{}).
+		Joins("JOIN tickets t ON t.id = survey_responses.ticket_id").
+		Where("t.category_id <> ''").
+		Distinct().
+		Pluck("t.category_id", &usedIDs).Error; err != nil {
+		return nil, err
+	}
+	return usedIDs, nil
+}
+
 func (repo *ReportRepository) ListTemplatesByIDsWithQuestions(ids []string) ([]domain.SurveyTemplate, error) {
 	if len(ids) == 0 {
 		return []domain.SurveyTemplate{}, nil
