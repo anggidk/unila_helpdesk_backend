@@ -109,9 +109,7 @@ CREATE TABLE IF NOT EXISTS public.service_categories (
     id varchar(6) PRIMARY KEY,
     name varchar(120),
     guest_allowed boolean,
-    survey_template_id varchar(12),
-    created_at timestamptz,
-    updated_at timestamptz
+    survey_template_id varchar(12)
 );
 
 CREATE TABLE IF NOT EXISTS public.tickets (

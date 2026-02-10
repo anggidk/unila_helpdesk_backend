@@ -64,8 +64,6 @@ type ServiceCategory struct {
 	Name             string `gorm:"size:120"`
 	GuestAllowed     bool
 	SurveyTemplateID string `gorm:"size:12"`
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
 }
 
 type Ticket struct {
