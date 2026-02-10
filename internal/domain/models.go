@@ -79,7 +79,6 @@ type Ticket struct {
 	CategoryID     string         `gorm:"size:6;index"`
 	Priority       TicketPriority `gorm:"size:20"`
 	Status         TicketStatus   `gorm:"size:20"`
-	AssigneeID     *string        `gorm:"size:10;index"`
 	StaffNotes     string         `gorm:"type:text"`
 	SurveyRequired bool           `gorm:"default:false"`
 	CreatedAt      time.Time

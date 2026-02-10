@@ -53,7 +53,6 @@ type TicketUpdateRequest struct {
 	Category    *string                `json:"category"`
 	Priority    *domain.TicketPriority `json:"priority"`
 	Status      *domain.TicketStatus   `json:"status"`
-	AssigneeID  *string                `json:"assigneeId"`
 	StaffNotes  *string                `json:"staffNotes"`
 }
 
@@ -284,14 +283,6 @@ func (service *TicketService) UpdateTicket(ctx context.Context, user domain.User
 			ticket.Status = *req.Status
 			statusChanged = true
 		}
-		if req.AssigneeID != nil {
-			value := strings.TrimSpace(*req.AssigneeID)
-			if value == "" {
-				ticket.AssigneeID = nil
-			} else {
-				ticket.AssigneeID = &value
-			}
-		}
 		if req.StaffNotes != nil {
 			ticket.StaffNotes = strings.TrimSpace(*req.StaffNotes)
 		}
@@ -521,9 +512,6 @@ func (service *TicketService) toTicketDTO(
 	}
 	if ticket.Phone != nil {
 		result.Phone = *ticket.Phone
-	}
-	if ticket.AssigneeID != nil {
-		result.AssigneeID = *ticket.AssigneeID
 	}
 	return result
 }

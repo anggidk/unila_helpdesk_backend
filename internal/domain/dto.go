@@ -35,7 +35,6 @@ type TicketDTO struct {
 	Priority       TicketPriority     `json:"priority"`
 	CreatedAt      time.Time          `json:"createdAt"`
 	IsGuest        bool               `json:"isGuest"`
-	AssigneeID     string             `json:"assigneeId,omitempty"`
 	StaffNotes     string             `json:"staffNotes,omitempty"`
 	Attachments    []string           `json:"attachments"`
 	History        []TicketHistoryDTO `json:"history"`

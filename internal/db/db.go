@@ -77,9 +77,6 @@ func quoteIdentifier(value string) string {
 
 func AutoMigrate(database *gorm.DB) error {
 	return database.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Exec("DROP TABLE IF EXISTS public.schema_migrations").Error; err != nil {
-			return err
-		}
 		return tx.Exec(migration20260209Baseline).Error
 	})
 }
@@ -107,25 +104,24 @@ CREATE TABLE IF NOT EXISTS public.users (
 
 CREATE TABLE IF NOT EXISTS public.service_categories (
     id varchar(6) PRIMARY KEY,
+    survey_template_id varchar(12),
     name varchar(120),
-    guest_allowed boolean,
-    survey_template_id varchar(12)
+    guest_allowed boolean
 );
 
 CREATE TABLE IF NOT EXISTS public.tickets (
     id varchar(32) PRIMARY KEY,
-    ticket_number varchar(20),
     user_id varchar(10),
+    category_id varchar(6),
+    ticket_number varchar(20),
     reporter_name varchar(120),
     email varchar(180),
     phone varchar(20),
     is_guest boolean DEFAULT false,
     title varchar(180),
     description text,
-    category_id varchar(6),
     priority varchar(20),
     status varchar(20),
-    assignee_id varchar(10),
     staff_notes text,
     survey_required boolean DEFAULT false,
     created_at timestamptz,
@@ -153,10 +149,10 @@ CREATE TABLE IF NOT EXISTS public.attachments (
 
 CREATE TABLE IF NOT EXISTS public.survey_templates (
     id varchar(12) PRIMARY KEY,
+    category_id varchar(6),
     title varchar(160),
     description text,
     framework varchar(80),
-    category_id varchar(6),
     created_at timestamptz,
     updated_at timestamptz
 );
@@ -172,8 +168,8 @@ CREATE TABLE IF NOT EXISTS public.survey_questions (
 
 CREATE TABLE IF NOT EXISTS public.survey_responses (
     id varchar(32) PRIMARY KEY,
-    ticket_id varchar(32),
     user_id varchar(10),
+    ticket_id varchar(32),
     template_id varchar(12),
     answers jsonb,
     score numeric,
@@ -320,13 +316,6 @@ BEGIN
             ON UPDATE NO ACTION ON DELETE SET NULL;
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tickets_assignee_id') THEN
-        ALTER TABLE public.tickets
-            ADD CONSTRAINT fk_tickets_assignee_id
-            FOREIGN KEY (assignee_id) REFERENCES public.users(id)
-            ON UPDATE NO ACTION ON DELETE SET NULL;
-    END IF;
-
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tickets_category_id') THEN
         ALTER TABLE public.tickets
             ADD CONSTRAINT fk_tickets_category_id
@@ -364,7 +353,6 @@ END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS ux_tickets_ticket_number ON public.tickets(ticket_number);
 CREATE INDEX IF NOT EXISTS ix_tickets_user_id ON public.tickets(user_id);
 CREATE INDEX IF NOT EXISTS ix_tickets_category_id ON public.tickets(category_id);
-CREATE INDEX IF NOT EXISTS ix_tickets_assignee_id ON public.tickets(assignee_id);
 CREATE INDEX IF NOT EXISTS ix_tickets_status ON public.tickets(status);
 CREATE INDEX IF NOT EXISTS ix_tickets_created_at ON public.tickets(created_at);
 CREATE INDEX IF NOT EXISTS ix_attachments_ticket_id ON public.attachments(ticket_id);
