@@ -133,10 +133,11 @@ func (handler *ReportHandler) surveySatisfactionExport(c *gin.Context) {
 	header := []string{
 		"Kategori",
 		"Template",
+		"Framework",
 		"Ticket ID",
 		"User ID",
 		"Tanggal",
-		"Skor(0-100)",
+		"Skor(0-5)",
 	}
 	for idx, question := range report.Questions {
 		header = append(header, fmt.Sprintf("Q%d - %s", idx+1, question.Text))
@@ -150,6 +151,7 @@ func (handler *ReportHandler) surveySatisfactionExport(c *gin.Context) {
 		values = append(values,
 			report.Category,
 			report.Template,
+			report.Framework,
 			response.TicketID,
 			response.UserID,
 			response.CreatedAt.In(reportHandlerLocationWIB).Format(time.RFC3339),

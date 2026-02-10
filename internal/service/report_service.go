@@ -446,6 +446,7 @@ func (service *ReportService) SurveySatisfactionExport(
 	report := &domain.SurveySatisfactionExportDTO{
 		TemplateID: template.ID,
 		Template:   template.Title,
+		Framework:  template.Framework,
 		CategoryID: categoryID,
 		Category:   categoryName,
 		Period:     normalizePeriod(period),

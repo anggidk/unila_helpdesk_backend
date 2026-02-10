@@ -155,6 +155,7 @@ type SurveySatisfactionExportResponseDTO struct {
 type SurveySatisfactionExportDTO struct {
 	TemplateID string                                `json:"templateId"`
 	Template   string                                `json:"template"`
+	Framework  string                                `json:"framework"`
 	CategoryID string                                `json:"categoryId"`
 	Category   string                                `json:"category"`
 	Period     string                                `json:"period"`
