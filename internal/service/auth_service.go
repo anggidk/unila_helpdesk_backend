@@ -57,6 +57,8 @@ type Claims struct {
 }
 
 func (service *AuthService) IssueToken(user domain.User) (AuthResult, error) {
+	service.cleanupExpiredRefreshTokens()
+
 	expiry := service.cfg.JWTExpiryUser
 	refreshExpiry := service.cfg.JWTRefreshExpiryUser
 	if user.Role == domain.RoleAdmin {
@@ -140,6 +142,8 @@ func (service *AuthService) LoginWithPasswordClient(username string, password st
 }
 
 func (service *AuthService) RefreshWithTokenClient(refreshToken string, clientType string) (AuthResult, error) {
+	service.cleanupExpiredRefreshTokens()
+
 	token := strings.TrimSpace(refreshToken)
 	if token == "" {
 		return AuthResult{}, errors.New("refresh token wajib diisi")
@@ -162,6 +166,16 @@ func (service *AuthService) RefreshWithTokenClient(refreshToken string, clientTy
 	}
 	_ = service.refreshTokens.DeleteByID(stored.ID)
 	return service.IssueToken(*user)
+}
+
+func (service *AuthService) LogoutWithRefreshToken(refreshToken string) error {
+	service.cleanupExpiredRefreshTokens()
+
+	token := strings.TrimSpace(refreshToken)
+	if token == "" {
+		return errors.New("refresh token wajib diisi")
+	}
+	return service.refreshTokens.DeleteByHash(hashToken(token))
 }
 
 func ensureAdminAllowed(user domain.User, clientType string) error {
@@ -198,4 +212,8 @@ func generateRefreshToken() (string, error) {
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
+}
+
+func (service *AuthService) cleanupExpiredRefreshTokens() {
+	_ = service.refreshTokens.DeleteExpired(service.now())
 }
