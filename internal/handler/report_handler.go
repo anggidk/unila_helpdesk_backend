@@ -134,8 +134,6 @@ func (handler *ReportHandler) surveySatisfactionExport(c *gin.Context) {
 		"Kategori",
 		"Template",
 		"Framework",
-		"Ticket ID",
-		"User ID",
 		"Tanggal",
 		"Skor(0-5)",
 	}
@@ -152,8 +150,6 @@ func (handler *ReportHandler) surveySatisfactionExport(c *gin.Context) {
 			report.Category,
 			report.Template,
 			report.Framework,
-			response.TicketID,
-			response.UserID,
 			response.CreatedAt.In(reportHandlerLocationWIB).Format(time.RFC3339),
 			fmt.Sprintf("%.2f", response.Score),
 		)
