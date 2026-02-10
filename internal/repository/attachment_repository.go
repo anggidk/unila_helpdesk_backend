@@ -15,7 +15,11 @@ func NewAttachmentRepository(db *gorm.DB) *AttachmentRepository {
 }
 
 func (repo *AttachmentRepository) Create(attachment *domain.Attachment) error {
-	return repo.db.Create(attachment).Error
+	query := repo.db
+	if attachment.TicketID == "" {
+		query = query.Omit("TicketID")
+	}
+	return query.Create(attachment).Error
 }
 
 func (repo *AttachmentRepository) FindByID(id string) (*domain.Attachment, error) {
