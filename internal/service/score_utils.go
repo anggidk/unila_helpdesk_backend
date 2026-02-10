@@ -32,16 +32,16 @@ func scoreFromYesNo(value interface{}) (float64, bool) {
 	switch v := value.(type) {
 	case bool:
 		if v {
-			return 100, true
+			return 5, true
 		}
-		return 0, true
+		return 1, true
 	case string:
 		cleaned := strings.ToLower(strings.TrimSpace(v))
 		if cleaned == "ya" || cleaned == "yes" || cleaned == "true" {
-			return 100, true
+			return 5, true
 		}
 		if cleaned == "tidak" || cleaned == "no" || cleaned == "false" {
-			return 0, true
+			return 1, true
 		}
 	}
 	return 0, false
@@ -67,21 +67,20 @@ func scoreFromScale(value interface{}, max int) (float64, bool) {
 	if numeric < 1 || numeric > float64(max) {
 		return 0, false
 	}
-	return normalizeToHundred(numeric, max), true
+	return normalizeToFive(numeric, max), true
 }
 
-func normalizeToHundred(value float64, max int) float64 {
+func normalizeToFive(value float64, max int) float64 {
 	if max <= 1 {
-		return 100
+		return 5
 	}
-	// Map the minimum Likert choice to 1 star-equivalent (20 on a 0-100 scale),
-	// and the maximum choice to 5 stars-equivalent (100).
-	normalized := 20 + ((value-1)*80)/float64(max-1)
-	if normalized < 0 {
-		return 0
+	// Map every ordinal scale (2/3/4/5) into the same 1..5 basis.
+	normalized := 1 + ((value-1)*4)/float64(max-1)
+	if normalized < 1 {
+		return 1
 	}
-	if normalized > 100 {
-		return 100
+	if normalized > 5 {
+		return 5
 	}
 	return normalized
 }
