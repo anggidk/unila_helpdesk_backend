@@ -69,7 +69,6 @@ type SurveyTemplateDTO struct {
 	Title       string              `json:"title"`
 	Description string              `json:"description"`
 	Framework   string              `json:"framework"`
-	CategoryID  string              `json:"categoryId"`
 	Questions   []SurveyQuestionDTO `json:"questions"`
 	CreatedAt   time.Time           `json:"createdAt"`
 	UpdatedAt   time.Time           `json:"updatedAt"`

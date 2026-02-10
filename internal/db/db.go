@@ -104,7 +104,6 @@ CREATE TABLE IF NOT EXISTS public.users (
 
 CREATE TABLE IF NOT EXISTS public.service_categories (
     id varchar(6) PRIMARY KEY,
-    survey_template_id varchar(12),
     name varchar(120),
     guest_allowed boolean
 );
@@ -149,12 +148,17 @@ CREATE TABLE IF NOT EXISTS public.attachments (
 
 CREATE TABLE IF NOT EXISTS public.survey_templates (
     id varchar(12) PRIMARY KEY,
-    category_id varchar(6),
     title varchar(160),
     description text,
     framework varchar(80),
     created_at timestamptz,
     updated_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS public.category_templates (
+    category_id varchar(6) PRIMARY KEY,
+    template_id varchar(12) NOT NULL,
+    assigned_at timestamptz
 );
 
 CREATE TABLE IF NOT EXISTS public.survey_questions (
@@ -184,8 +188,6 @@ CREATE TABLE IF NOT EXISTS public.survey_response_items (
     created_at timestamptz
 );
 
-ALTER TABLE public.service_categories
-    ALTER COLUMN survey_template_id TYPE varchar(12);
 ALTER TABLE public.tickets
     ALTER COLUMN id TYPE varchar(32);
 ALTER TABLE public.ticket_histories
@@ -196,6 +198,9 @@ ALTER TABLE public.attachments
     ALTER COLUMN ticket_id TYPE varchar(32);
 ALTER TABLE public.survey_templates
     ALTER COLUMN id TYPE varchar(12);
+ALTER TABLE public.category_templates
+    ALTER COLUMN category_id TYPE varchar(6),
+    ALTER COLUMN template_id TYPE varchar(12);
 ALTER TABLE public.survey_questions
     ALTER COLUMN id TYPE varchar(32),
     ALTER COLUMN template_id TYPE varchar(12);
@@ -241,6 +246,15 @@ ALTER TABLE public.fcm_tokens
     ALTER COLUMN id TYPE varchar(64);
 ALTER TABLE public.refresh_tokens
     ALTER COLUMN id TYPE varchar(64);
+
+ALTER TABLE public.service_categories
+    DROP CONSTRAINT IF EXISTS fk_service_categories_survey_template_id;
+ALTER TABLE public.survey_templates
+    DROP CONSTRAINT IF EXISTS fk_survey_templates_category_id;
+ALTER TABLE public.service_categories
+    DROP COLUMN IF EXISTS survey_template_id;
+ALTER TABLE public.survey_templates
+    DROP COLUMN IF EXISTS category_id;
 
 DO $$
 BEGIN
@@ -321,13 +335,6 @@ BEGIN
             ON UPDATE NO ACTION ON DELETE NO ACTION;
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_survey_templates_category_id') THEN
-        ALTER TABLE public.survey_templates
-            ADD CONSTRAINT fk_survey_templates_category_id
-            FOREIGN KEY (category_id) REFERENCES public.service_categories(id)
-            ON UPDATE NO ACTION ON DELETE NO ACTION;
-    END IF;
-
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_ticket_histories_ticket_id') THEN
         ALTER TABLE public.ticket_histories
             ADD CONSTRAINT fk_ticket_histories_ticket_id
@@ -349,11 +356,18 @@ BEGIN
             ON UPDATE NO ACTION ON DELETE NO ACTION;
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_service_categories_survey_template_id') THEN
-        ALTER TABLE public.service_categories
-            ADD CONSTRAINT fk_service_categories_survey_template_id
-            FOREIGN KEY (survey_template_id) REFERENCES public.survey_templates(id)
-            ON UPDATE NO ACTION ON DELETE SET NULL;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_category_templates_category_id') THEN
+        ALTER TABLE public.category_templates
+            ADD CONSTRAINT fk_category_templates_category_id
+            FOREIGN KEY (category_id) REFERENCES public.service_categories(id)
+            ON UPDATE NO ACTION ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_category_templates_template_id') THEN
+        ALTER TABLE public.category_templates
+            ADD CONSTRAINT fk_category_templates_template_id
+            FOREIGN KEY (template_id) REFERENCES public.survey_templates(id)
+            ON UPDATE NO ACTION ON DELETE CASCADE;
     END IF;
 END $$;
 
@@ -389,6 +403,7 @@ CREATE INDEX IF NOT EXISTS ix_survey_responses_template_id ON public.survey_resp
 CREATE INDEX IF NOT EXISTS ix_survey_response_items_response_id ON public.survey_response_items(response_id);
 CREATE INDEX IF NOT EXISTS ix_survey_response_items_question_id ON public.survey_response_items(question_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_survey_response_items_response_question ON public.survey_response_items(response_id, question_id);
+CREATE INDEX IF NOT EXISTS ix_category_templates_template_id ON public.category_templates(template_id);
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_user_id ON public.refresh_tokens(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_refresh_tokens_token_hash ON public.refresh_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_expires_at ON public.refresh_tokens(expires_at);
