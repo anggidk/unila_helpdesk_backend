@@ -33,8 +33,12 @@ func main() {
 		gin.SetMode(gin.DebugMode)
 	}
 
-	if err := db.EnsureDatabase(cfg); err != nil {
-		log.Fatalf("database ensure failed: %v", err)
+	if !strings.EqualFold(cfg.Environment, "production") {
+		if err := db.EnsureDatabase(cfg); err != nil {
+			log.Fatalf("database ensure failed: %v", err)
+		}
+	} else {
+		log.Printf("skip database ensure in production")
 	}
 	database, err := db.Connect(cfg)
 	if err != nil {
