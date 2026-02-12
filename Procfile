@@ -1,2 +1,2 @@
-web: go run ./cmd/api
-seed: go run ./cmd/seed
+web: ./cmd/api
+seed: ./cmd/seed
