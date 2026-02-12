@@ -2,6 +2,9 @@ package fcm
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"log"
 	"strings"
 
@@ -19,7 +22,12 @@ func NewClient(enabled bool, credentialsPath string) *Client {
 	if !enabled {
 		return &Client{enabled: false}
 	}
-	app, err := firebase.NewApp(context.Background(), nil, option.WithCredentialsFile(credentialsPath))
+	credentialsOption, err := resolveCredentialOption(credentialsPath)
+	if err != nil {
+		log.Printf("FCM disabled: invalid credentials format: %v", err)
+		return &Client{enabled: false}
+	}
+	app, err := firebase.NewApp(context.Background(), nil, credentialsOption)
 	if err != nil {
 		log.Printf("FCM disabled: failed to init app: %v", err)
 		return &Client{enabled: false}
@@ -30,6 +38,26 @@ func NewClient(enabled bool, credentialsPath string) *Client {
 		return &Client{enabled: false}
 	}
 	return &Client{enabled: true, sender: sender}
+}
+
+func resolveCredentialOption(raw string) (option.ClientOption, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, errors.New("empty credentials")
+	}
+
+	// Raw service account JSON.
+	if strings.HasPrefix(trimmed, "{") && json.Valid([]byte(trimmed)) {
+		return option.WithCredentialsJSON([]byte(trimmed)), nil
+	}
+
+	// Base64 encoded service account JSON (recommended for Heroku config vars).
+	if decoded, err := base64.StdEncoding.DecodeString(trimmed); err == nil && json.Valid(decoded) {
+		return option.WithCredentialsJSON(decoded), nil
+	}
+
+	// Fallback to filesystem path (local/dev usage).
+	return option.WithCredentialsFile(trimmed), nil
 }
 
 func (client *Client) SendToTokens(

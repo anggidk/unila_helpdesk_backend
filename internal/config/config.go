@@ -38,9 +38,12 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	httpPort, err := envRequiredString("HTTP_PORT")
-	if err != nil {
-		return Config{}, err
+	httpPort := strings.TrimSpace(os.Getenv("PORT"))
+	if httpPort == "" {
+		httpPort = strings.TrimSpace(os.Getenv("HTTP_PORT"))
+	}
+	if httpPort == "" {
+		httpPort = "8080"
 	}
 	baseURL, err := envRequiredString("BASE_URL")
 	if err != nil {

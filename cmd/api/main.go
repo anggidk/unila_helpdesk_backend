@@ -125,9 +125,6 @@ func validateConfig(cfg config.Config) {
 	if strings.TrimSpace(cfg.Environment) == "" {
 		log.Fatal("APP_ENV is required")
 	}
-	if strings.TrimSpace(cfg.HTTPPort) == "" {
-		log.Fatal("HTTP_PORT is required")
-	}
 	if strings.TrimSpace(cfg.BaseURL) == "" {
 		log.Fatal("BASE_URL is required")
 	}
