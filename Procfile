@@ -1,2 +1,2 @@
-web: ./cmd/api
-seed: ./cmd/seed
+web: bin/api
+seed: bin/seed
