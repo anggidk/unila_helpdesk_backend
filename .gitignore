@@ -37,8 +37,8 @@ Thumbs.db
 *.log
 
 # Security sensitive files
-cmd/seed/main.go
-**/seed/**
+# cmd/seed/main.go
+# **/seed/**
 secrets/
 *.pem
 *.key
