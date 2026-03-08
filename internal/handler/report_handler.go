@@ -87,13 +87,13 @@ func (handler *ReportHandler) satisfactionSummary(c *gin.Context) {
 }
 
 func (handler *ReportHandler) cohortReport(c *gin.Context) {
-	period, periods := parsePeriodParams(c, 5)
-	rows, err := handler.reports.CohortReport(period, periods)
+	period, lookback, buckets := parseCohortParams(c)
+	report, err := handler.reports.CohortReport(period, lookback, buckets)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondOK(c, rows)
+	respondOK(c, report)
 }
 
 func (handler *ReportHandler) surveySatisfaction(c *gin.Context) {
@@ -218,6 +218,37 @@ func parsePeriodParams(c *gin.Context, defaultPeriods int) (string, int) {
 		}
 	}
 	return c.DefaultQuery("period", "monthly"), periods
+}
+
+func parseCohortParams(c *gin.Context) (string, int, int) {
+	period := c.DefaultQuery("period", "daily")
+	lookback := 0
+	buckets := 0
+
+	if raw := c.Query("lookback"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			lookback = parsed
+		}
+	}
+	if raw := c.Query("buckets"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			buckets = parsed
+		}
+	}
+
+	if buckets == 0 {
+		if raw := c.Query("periods"); raw != "" {
+			if parsed, err := strconv.Atoi(raw); err == nil {
+				buckets = parsed
+			}
+		} else if raw := c.Query("months"); raw != "" {
+			if parsed, err := strconv.Atoi(raw); err == nil {
+				buckets = parsed
+			}
+		}
+	}
+
+	return period, lookback, buckets
 }
 
 func sanitizeFilename(value string) string {

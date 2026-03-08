@@ -31,6 +31,14 @@ type EntityCategoryTotalRow struct {
 	Total      int
 }
 
+type RegisteredSurveyEventRow struct {
+	UserID    string
+	Entity    string
+	ServiceID int
+	CreatedAt time.Time
+	Score     float64
+}
+
 func NewReportRepository(db *gorm.DB) *ReportRepository {
 	return &ReportRepository{db: db}
 }
@@ -43,6 +51,26 @@ func (repo *ReportRepository) ListSurveyResponsesByCreatedRange(start time.Time,
 		return nil, err
 	}
 	return responses, nil
+}
+
+func (repo *ReportRepository) ListRegisteredSurveyEvents(end time.Time) ([]RegisteredSurveyEventRow, error) {
+	var rows []RegisteredSurveyEventRow
+	if err := repo.db.Raw(`
+		SELECT sr.number_id AS user_id,
+		       COALESCE(NULLIF(u.entity, ''), ?) AS entity,
+		       t.id_service AS service_id,
+		       sr.created_at,
+		       sr.score
+		FROM survey_responses sr
+		JOIN users u ON u.id = sr.number_id
+		JOIN tickets t ON t.id = sr.ticket_id
+		WHERE u.role = ?
+		  AND sr.created_at < ?
+		ORDER BY sr.number_id ASC, sr.created_at ASC, sr.id ASC
+	`, domain.EntityLainnya, domain.RoleRegistered, end).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 func (repo *ReportRepository) ListActiveUsersInRange(userIDs []string, start time.Time, end time.Time) ([]string, error) {

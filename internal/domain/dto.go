@@ -7,12 +7,12 @@ import (
 )
 
 type UserDTO struct {
-	ID     string   `json:"id"`
-	Username string `json:"username"`
-	Name   string   `json:"name"`
-	Email  string   `json:"email"`
-	Role   UserRole `json:"role"`
-	Entity string   `json:"entity"`
+	ID       string   `json:"id"`
+	Username string   `json:"username"`
+	Name     string   `json:"name"`
+	Email    string   `json:"email"`
+	Role     UserRole `json:"role"`
+	Entity   string   `json:"entity"`
 }
 
 type TicketDTO struct {
@@ -82,6 +82,40 @@ type NotificationDTO struct {
 	Message   string    `json:"message"`
 	Timestamp time.Time `json:"timestamp"`
 	IsRead    bool      `json:"isRead"`
+}
+
+type CohortBucketDTO struct {
+	EligibleUsers *int     `json:"eligibleUsers"`
+	ActiveUsers   *int     `json:"activeUsers"`
+	Retention     *float64 `json:"retention"`
+	AvgScore      *float64 `json:"avgScore"`
+}
+
+type CohortAnalysisRowDTO struct {
+	Label      string            `json:"label"`
+	Users      int               `json:"users"`
+	Buckets    []CohortBucketDTO `json:"buckets"`
+	DropOff    *float64          `json:"dropOff"`
+	ScoreDelta *float64          `json:"scoreDelta"`
+}
+
+type CohortInsightDTO struct {
+	Title  string `json:"title"`
+	Detail string `json:"detail"`
+	Value  string `json:"value"`
+}
+
+type CohortAnalysisDTO struct {
+	Period             string                 `json:"period"`
+	LookbackPeriods    int                    `json:"lookbackPeriods"`
+	BucketCount        int                    `json:"bucketCount"`
+	Start              time.Time              `json:"start"`
+	End                time.Time              `json:"end"`
+	BucketLabels       []string               `json:"bucketLabels"`
+	Overall            []CohortAnalysisRowDTO `json:"overall"`
+	ServiceComparisons []CohortAnalysisRowDTO `json:"serviceComparisons"`
+	EntityComparisons  []CohortAnalysisRowDTO `json:"entityComparisons"`
+	Insights           []CohortInsightDTO     `json:"insights"`
 }
 
 type CohortRowDTO struct {

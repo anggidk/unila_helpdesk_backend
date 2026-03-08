@@ -36,75 +36,6 @@ func NewReportService(
 	}
 }
 
-func (service *ReportService) CohortReport(period string, periods int) ([]domain.CohortRowDTO, error) {
-	if periods <= 0 {
-		periods = 5
-	}
-	unit := normalizePeriod(period)
-	now := nowInWIB(service.now)
-	end := periodStart(now, unit)
-	start := addPeriods(end, unit, -(periods - 1))
-
-	rows := make([]domain.CohortRowDTO, 0, periods)
-	for i := 0; i < periods; i++ {
-		cohortStart := addPeriods(start, unit, i)
-		cohortEnd := addPeriods(cohortStart, unit, 1)
-
-		responses, err := service.reports.ListSurveyResponsesByCreatedRange(cohortStart, cohortEnd)
-		if err != nil {
-			return nil, err
-		}
-
-		userSet := make(map[string]struct{})
-		for _, response := range responses {
-			userSet[response.UserID] = struct{}{}
-		}
-
-		users := make([]string, 0, len(userSet))
-		for id := range userSet {
-			users = append(users, id)
-		}
-
-		cohortSize := len(users)
-		retention := make([]int, 0, periods)
-		if cohortSize == 0 {
-			retention = make([]int, periods)
-			rows = append(rows, domain.CohortRowDTO{
-				Label:        formatCohortLabel(cohortStart, unit),
-				Users:        0,
-				Retention:    retention,
-				AvgScore:     0,
-				ResponseRate: 0,
-			})
-			continue
-		}
-
-		avgScore, responseRate := calculateCohortScores(responses)
-
-		retention = append(retention, 100)
-		for step := 1; step < periods; step++ {
-			periodStart := addPeriods(cohortStart, unit, step)
-			periodEnd := addPeriods(periodStart, unit, 1)
-			activeUsers, err := service.reports.ListActiveUsersInRange(users, periodStart, periodEnd)
-			if err != nil {
-				return nil, err
-			}
-			percent := int(float64(len(activeUsers)) / float64(cohortSize) * 100)
-			retention = append(retention, percent)
-		}
-
-		rows = append(rows, domain.CohortRowDTO{
-			Label:        formatCohortLabel(cohortStart, unit),
-			Users:        cohortSize,
-			Retention:    retention,
-			AvgScore:     scoreToFivePoint(avgScore),
-			ResponseRate: responseRate,
-		})
-	}
-
-	return rows, nil
-}
-
 func normalizePeriod(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "daily":
@@ -160,6 +91,46 @@ func formatCohortLabel(value time.Time, unit string) string {
 	default:
 		return value.Format("Jan 2006")
 	}
+}
+
+func defaultCohortLookback(unit string) int {
+	switch unit {
+	case "daily":
+		return 30
+	case "weekly":
+		return 12
+	case "yearly":
+		return 5
+	default:
+		return 6
+	}
+}
+
+func defaultCohortBuckets(unit string) int {
+	switch unit {
+	case "daily":
+		return 10
+	case "weekly":
+		return 8
+	case "yearly":
+		return 5
+	default:
+		return 6
+	}
+}
+
+func normalizeCohortLookback(unit string, value int) int {
+	if value <= 0 {
+		return defaultCohortLookback(unit)
+	}
+	return value
+}
+
+func normalizeCohortBuckets(unit string, value int) int {
+	if value <= 0 {
+		return defaultCohortBuckets(unit)
+	}
+	return value
 }
 
 func calculateCohortScores(responses []domain.SurveyResponse) (float64, float64) {
@@ -258,7 +229,7 @@ func (service *ReportService) DashboardSummary() (domain.DashboardSummaryDTO, er
 }
 
 func (service *ReportService) ServiceSatisfactionSummary(period string, periods int) ([]domain.ServiceSatisfactionDTO, error) {
-	start, end := periodRange(period, periods, service.now)
+	start, end := rollingReportRange(period, service.now)
 
 	rows, err := service.reports.ListServiceSatisfactionRows(start, end)
 	if err != nil {
@@ -309,7 +280,7 @@ func (service *ReportService) SurveySatisfaction(
 		return nil, err
 	}
 
-	start, end := periodRange(period, periods, service.now)
+	start, end := rollingReportRange(period, service.now)
 
 	responses, err := service.reports.ListSurveyResponsesByTicketCategoryAndTemplate(
 		start,
@@ -398,7 +369,7 @@ func (service *ReportService) SurveySatisfactionExport(
 		return nil, err
 	}
 
-	start, end := periodRange(period, periods, service.now)
+	start, end := rollingReportRange(period, service.now)
 
 	responses, err := service.reports.ListSurveyResponsesByTicketCategoryAndTemplate(
 		start,
@@ -629,6 +600,23 @@ func periodRange(period string, periods int, nowFn func() time.Time) (time.Time,
 	end := addPeriods(periodStart(now, unit), unit, 1)
 	start := addPeriods(periodStart(now, unit), unit, -(periods - 1))
 	return start, end
+}
+
+func rollingReportRange(period string, nowFn func() time.Time) (time.Time, time.Time) {
+	now := nowInWIB(nowFn)
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, reportLocationWIB)
+	end := dayStart.AddDate(0, 0, 1)
+
+	switch normalizePeriod(period) {
+	case "daily":
+		return end.AddDate(0, 0, -1), end
+	case "weekly":
+		return end.AddDate(0, 0, -7), end
+	case "yearly":
+		return end.AddDate(0, 0, -365), end
+	default:
+		return end.AddDate(0, 0, -30), end
+	}
 }
 
 func nowInWIB(nowFn func() time.Time) time.Time {
