@@ -1,17 +1,22 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"unila_helpdesk_backend/internal/config"
 	"unila_helpdesk_backend/internal/db"
 	"unila_helpdesk_backend/internal/domain"
+	"unila_helpdesk_backend/internal/repository"
+	appservice "unila_helpdesk_backend/internal/service"
 
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -22,6 +27,22 @@ type seedUser struct {
 	Email    string
 	Role     domain.UserRole
 	Entity   string
+}
+
+type seedSurveyQuestion struct {
+	ID      string
+	Text    string
+	Type    domain.SurveyQuestionType
+	Options []string
+}
+
+type seedSurveyTemplate struct {
+	ID          string
+	CategoryID  int
+	Title       string
+	Description string
+	Framework   string
+	Questions   []seedSurveyQuestion
 }
 
 func hashPassword(password string) (string, error) {
@@ -103,6 +124,155 @@ func upsertUser(database *gorm.DB, seed seedUser) error {
 	return database.Create(&user).Error
 }
 
+func seedSurveyTemplates() []seedSurveyTemplate {
+	likert4Options := []string{
+		"Sangat Tidak Setuju",
+		"Tidak Setuju",
+		"Setuju",
+		"Sangat Setuju",
+	}
+	description := "Gunakan skala Likert 4: Sangat Tidak Setuju, Tidak Setuju, Setuju, dan Sangat Setuju."
+
+	return []seedSurveyTemplate{
+		{
+			ID:          "TPLNETWK001",
+			CategoryID:  domain.ServiceInternet,
+			Title:       "Survei Kepuasan Layanan Jaringan Internet",
+			Description: description,
+			Framework:   "Likert 4",
+			Questions: []seedSurveyQuestion{
+				{ID: "internet_q1", Text: "Gangguan jaringan internet saya ditangani dengan cepat.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "internet_q2", Text: "Petugas memahami masalah jaringan yang saya laporkan.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "internet_q3", Text: "Informasi perkembangan penanganan gangguan disampaikan dengan jelas.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "internet_q4", Text: "Koneksi internet kembali dapat digunakan setelah penanganan dilakukan.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "internet_q5", Text: "Stabilitas jaringan internet setelah perbaikan sudah memadai.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "internet_q6", Text: "Kecepatan akses internet setelah perbaikan sesuai dengan kebutuhan saya.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "internet_q7", Text: "Solusi yang diberikan sesuai dengan masalah jaringan yang saya alami.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "internet_q8", Text: "Secara keseluruhan, saya puas terhadap layanan penanganan jaringan internet.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "internet_q9", Text: "Saran atau masukan Anda untuk peningkatan layanan jaringan internet.", Type: domain.QuestionText, Options: []string{}},
+			},
+		},
+		{
+			ID:          "TPLWEBTD001",
+			CategoryID:  domain.ServiceWebsiteDown,
+			Title:       "Survei Kepuasan Layanan Penanganan Website Down",
+			Description: description,
+			Framework:   "Likert 4",
+			Questions: []seedSurveyQuestion{
+				{ID: "webdown_q1", Text: "Laporan gangguan website saya ditanggapi dengan cepat.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "webdown_q2", Text: "Petugas memahami masalah website yang saya laporkan.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "webdown_q3", Text: "Informasi mengenai status gangguan website disampaikan dengan jelas.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "webdown_q4", Text: "Website kembali dapat diakses setelah penanganan dilakukan.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "webdown_q5", Text: "Fungsi utama website kembali berjalan dengan baik.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "webdown_q6", Text: "Waktu penanganan gangguan website sesuai dengan harapan saya.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "webdown_q7", Text: "Solusi yang diberikan sesuai dengan masalah website yang terjadi.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "webdown_q8", Text: "Secara keseluruhan, saya puas terhadap layanan penanganan website down.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "webdown_q9", Text: "Saran atau masukan Anda untuk peningkatan layanan penanganan website.", Type: domain.QuestionText, Options: []string{}},
+			},
+		},
+		{
+			ID:          "TPLSYSIF001",
+			CategoryID:  domain.ServiceSistemInformasi,
+			Title:       "Survei Kepuasan Layanan Sistem Informasi",
+			Description: description,
+			Framework:   "Likert 4",
+			Questions: []seedSurveyQuestion{
+				{ID: "sysinfo_q1", Text: "Permasalahan sistem informasi saya ditangani dengan cepat.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "sysinfo_q2", Text: "Petugas memahami kendala yang saya alami pada sistem informasi.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "sysinfo_q3", Text: "Penjelasan atau informasi terkait penanganan diberikan dengan jelas.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "sysinfo_q4", Text: "Sistem informasi kembali dapat digunakan dengan baik setelah penanganan.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "sysinfo_q5", Text: "Fitur atau fungsi yang bermasalah sudah berjalan normal kembali.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "sysinfo_q6", Text: "Solusi yang diberikan membantu saya menyelesaikan kendala pada sistem.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "sysinfo_q7", Text: "Penanganan yang dilakukan sesuai dengan kebutuhan saya.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "sysinfo_q8", Text: "Secara keseluruhan, saya puas terhadap layanan sistem informasi.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "sysinfo_q9", Text: "Saran atau masukan Anda untuk peningkatan layanan sistem informasi.", Type: domain.QuestionText, Options: []string{}},
+			},
+		},
+		{
+			ID:          "TPLSIAK001",
+			CategoryID:  domain.ServiceSIAKADU,
+			Title:       "Survei Kepuasan Layanan SIAKADU",
+			Description: description,
+			Framework:   "Likert 4",
+			Questions: []seedSurveyQuestion{
+				{ID: "siakadu_q1", Text: "Kendala pada SIAKADU saya ditangani dengan cepat.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "siakadu_q2", Text: "Petugas memahami masalah yang saya alami pada SIAKADU.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "siakadu_q3", Text: "Informasi mengenai proses penanganan disampaikan dengan jelas.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "siakadu_q4", Text: "SIAKADU kembali dapat diakses setelah masalah ditangani.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "siakadu_q5", Text: "Fitur utama SIAKADU yang saya butuhkan kembali berjalan dengan baik.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "siakadu_q6", Text: "Penanganan yang dilakukan membantu saya melanjutkan aktivitas akademik.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "siakadu_q7", Text: "Solusi yang diberikan sesuai dengan kendala SIAKADU yang saya laporkan.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "siakadu_q8", Text: "Secara keseluruhan, saya puas terhadap layanan penanganan SIAKADU.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "siakadu_q9", Text: "Saran atau masukan Anda untuk peningkatan layanan SIAKADU.", Type: domain.QuestionText, Options: []string{}},
+			},
+		},
+		{
+			ID:          "TPLOTHR001",
+			CategoryID:  domain.ServiceLainnya,
+			Title:       "Survei Kepuasan Layanan Lainnya",
+			Description: description,
+			Framework:   "Likert 4",
+			Questions: []seedSurveyQuestion{
+				{ID: "lainnya_q1", Text: "Keluhan atau permintaan layanan saya ditanggapi dengan cepat.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "lainnya_q2", Text: "Petugas memahami kebutuhan atau masalah yang saya sampaikan.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "lainnya_q3", Text: "Informasi terkait proses penanganan diberikan dengan jelas.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "lainnya_q4", Text: "Penanganan dilakukan secara profesional dan sopan.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "lainnya_q5", Text: "Solusi yang diberikan sesuai dengan masalah atau kebutuhan saya.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "lainnya_q6", Text: "Permasalahan saya berhasil ditangani dengan baik.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "lainnya_q7", Text: "Waktu penyelesaian layanan sesuai dengan harapan saya.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "lainnya_q8", Text: "Secara keseluruhan, saya puas terhadap layanan yang saya terima.", Type: domain.QuestionLikert4, Options: likert4Options},
+				{ID: "lainnya_q9", Text: "Saran atau masukan Anda untuk peningkatan layanan pada kategori ini.", Type: domain.QuestionText, Options: []string{}},
+			},
+		},
+	}
+}
+
+func upsertSurveyTemplate(
+	repo *repository.SurveyRepository,
+	seed seedSurveyTemplate,
+) error {
+	now := time.Now()
+	questions := make([]domain.SurveyQuestion, 0, len(seed.Questions))
+	for _, question := range seed.Questions {
+		options, err := json.Marshal(question.Options)
+		if err != nil {
+			return fmt.Errorf("marshal options %s: %w", question.ID, err)
+		}
+		questions = append(questions, domain.SurveyQuestion{
+			ID:         question.ID,
+			TemplateID: seed.ID,
+			Text:       question.Text,
+			Type:       question.Type,
+			Options:    datatypes.JSON(options),
+			CreatedAt:  now,
+		})
+	}
+
+	existing, err := repo.FindByID(seed.ID)
+	if err == nil {
+		existing.Title = seed.Title
+		existing.Description = seed.Description
+		existing.Framework = seed.Framework
+		existing.UpdatedAt = now
+		existing.Questions = questions
+		return repo.ReplaceTemplate(existing)
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	template := domain.SurveyTemplate{
+		ID:          seed.ID,
+		Title:       seed.Title,
+		Description: seed.Description,
+		Framework:   seed.Framework,
+		Questions:   questions,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	return repo.CreateTemplate(&template)
+}
+
 func main() {
 	_ = godotenv.Load()
 	cfg, err := config.Load()
@@ -125,6 +295,24 @@ func main() {
 
 	if err := db.AutoMigrate(database); err != nil {
 		log.Fatalf("auto migrate failed: %v", err)
+	}
+
+	categoryRepo := repository.NewCategoryRepository(database)
+	surveyRepo := repository.NewSurveyRepository(database)
+
+	for _, category := range appservice.DefaultCategories() {
+		if err := categoryRepo.Upsert(category); err != nil {
+			log.Fatalf("seed service %d gagal: %v", category.ID, err)
+		}
+	}
+
+	for _, template := range seedSurveyTemplates() {
+		if err := upsertSurveyTemplate(surveyRepo, template); err != nil {
+			log.Fatalf("seed survey template %s gagal: %v", template.ID, err)
+		}
+		if err := categoryRepo.BindTemplateToCategory(template.CategoryID, template.ID); err != nil {
+			log.Fatalf("bind template %s ke category %d gagal: %v", template.ID, template.CategoryID, err)
+		}
 	}
 
 	seeds := []seedUser{
