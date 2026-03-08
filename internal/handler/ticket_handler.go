@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"unila_helpdesk_backend/internal/domain"
 	"unila_helpdesk_backend/internal/middleware"
@@ -92,13 +93,15 @@ func (handler *TicketHandler) listTicketsPaged(c *gin.Context) {
 }
 
 func parseTicketStatus(raw string) (domain.TicketStatus, error) {
-	switch raw {
+	switch strings.ToUpper(raw) {
 	case string(domain.StatusWaiting):
 		return domain.StatusWaiting, nil
-	case string(domain.StatusInProgress):
-		return domain.StatusInProgress, nil
-	case string(domain.StatusResolved):
-		return domain.StatusResolved, nil
+	case string(domain.StatusAssign):
+		return domain.StatusAssign, nil
+	case string(domain.StatusDone):
+		return domain.StatusDone, nil
+	case string(domain.StatusReject):
+		return domain.StatusReject, nil
 	}
 	return "", errors.New("status tiket tidak valid")
 }
@@ -106,7 +109,7 @@ func parseTicketStatus(raw string) (domain.TicketStatus, error) {
 func (handler *TicketHandler) searchTickets(c *gin.Context) {
 	query := c.Query("q")
 	user, hasUser := middleware.GetUser(c)
-	guestOnly := false
+	guestOnly := !hasUser
 	if hasUser && user.Role == domain.RoleGuest {
 		guestOnly = true
 	}

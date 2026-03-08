@@ -2,6 +2,8 @@ package service
 
 import (
 	"errors"
+	"strconv"
+	"strings"
 
 	"unila_helpdesk_backend/internal/domain"
 	"unila_helpdesk_backend/internal/repository"
@@ -38,17 +40,21 @@ func (service *CategoryService) ListGuest() ([]domain.ServiceCategoryDTO, error)
 }
 
 func (service *CategoryService) AssignTemplate(categoryID string, templateID string) error {
-	if categoryID == "" {
+	if strings.TrimSpace(categoryID) == "" {
 		return errors.New("kategori tidak ditemukan")
 	}
-	return service.categories.UpdateTemplate(categoryID, templateID)
+	parsedID, err := strconv.Atoi(strings.TrimSpace(categoryID))
+	if err != nil || parsedID <= 0 {
+		return errors.New("kategori tidak valid")
+	}
+	return service.categories.UpdateTemplate(parsedID, templateID)
 }
 
 func toCategoryDTOs(items []domain.ServiceCategory) []domain.ServiceCategoryDTO {
 	result := make([]domain.ServiceCategoryDTO, 0, len(items))
 	for _, item := range items {
 		result = append(result, domain.ServiceCategoryDTO{
-			ID:           item.ID,
+			ID:           strconv.Itoa(item.ID),
 			Name:         item.Name,
 			GuestAllowed: item.GuestAllowed,
 			TemplateID:   item.SurveyTemplateID,

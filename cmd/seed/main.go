@@ -9,7 +9,6 @@ import (
 	"unila_helpdesk_backend/internal/config"
 	"unila_helpdesk_backend/internal/db"
 	"unila_helpdesk_backend/internal/domain"
-	"unila_helpdesk_backend/internal/util"
 
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
@@ -33,10 +32,33 @@ func hashPassword(password string) (string, error) {
 	return string(hashed), nil
 }
 
+func normalizeSeedEntity(entity string) string {
+	switch strings.ToUpper(strings.TrimSpace(entity)) {
+	case domain.EntityDosen:
+		return domain.EntityDosen
+	case domain.EntityTendik:
+		return domain.EntityTendik
+	case domain.EntityMahasiswa:
+		return domain.EntityMahasiswa
+	default:
+		return domain.EntityLainnya
+	}
+}
+
+func defaultUserID(username string) string {
+	cleaned := strings.ToUpper(strings.TrimSpace(username))
+	cleaned = strings.NewReplacer(" ", "", ".", "", "-", "", "_", "").Replace(cleaned)
+	if len(cleaned) > 25 {
+		return cleaned[:25]
+	}
+	return cleaned
+}
+
 func upsertUser(database *gorm.DB, seed seedUser) error {
 	email := strings.ToLower(strings.TrimSpace(seed.Email))
 	username := strings.ToLower(strings.TrimSpace(seed.Username))
 	password := strings.TrimSpace(seed.Password)
+	entity := normalizeSeedEntity(seed.Entity)
 
 	if email == "" || username == "" {
 		return fmt.Errorf("username dan email wajib diisi")
@@ -57,7 +79,7 @@ func upsertUser(database *gorm.DB, seed seedUser) error {
 			"username":      username,
 			"name":          seed.Name,
 			"role":          seed.Role,
-			"entity":        seed.Entity,
+			"entity":        entity,
 			"password_hash": hashed,
 			"is_active":     true,
 		}
@@ -68,13 +90,13 @@ func upsertUser(database *gorm.DB, seed seedUser) error {
 	}
 
 	user := domain.User{
-		ID:           util.NewID(10),
+		ID:           defaultUserID(username),
 		Username:     username,
 		PasswordHash: hashed,
 		Name:         seed.Name,
 		Email:        email,
 		Role:         seed.Role,
-		Entity:       seed.Entity,
+		Entity:       entity,
 		IsActive:     true,
 	}
 

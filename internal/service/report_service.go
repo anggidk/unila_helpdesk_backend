@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -226,7 +227,7 @@ func (service *ReportService) DashboardSummary() (domain.DashboardSummaryDTO, er
 
 	openTickets, err := service.reports.CountOpenTickets([]domain.TicketStatus{
 		domain.StatusWaiting,
-		domain.StatusInProgress,
+		domain.StatusAssign,
 	})
 	if err != nil {
 		return domain.DashboardSummaryDTO{}, err
@@ -237,7 +238,7 @@ func (service *ReportService) DashboardSummary() (domain.DashboardSummaryDTO, er
 	resolvedThisMonth, err := service.reports.CountResolvedTicketsInRange(
 		monthStart,
 		monthStart.AddDate(0, 1, 0),
-		domain.StatusResolved,
+		domain.StatusDone,
 	)
 	if err != nil {
 		return domain.DashboardSummaryDTO{}, err
@@ -433,7 +434,7 @@ func (service *ReportService) SurveySatisfactionExport(
 		}
 		responseDTOs = append(responseDTOs, domain.SurveySatisfactionExportResponseDTO{
 			ID:        response.ID,
-			TicketID:  response.TicketID,
+			TicketID:  strconv.Itoa(response.TicketID),
 			UserID:    response.UserID,
 			Score:     scoreToFivePoint(response.Score),
 			CreatedAt: response.CreatedAt,
@@ -505,11 +506,12 @@ func (service *ReportService) SurveyCategoriesWithResponses() ([]domain.ServiceC
 
 	result := make([]domain.ServiceCategoryDTO, 0)
 	for _, item := range categories {
-		if _, ok := usedSet[item.ID]; !ok {
+		itemID := strconv.Itoa(item.ID)
+		if _, ok := usedSet[itemID]; !ok {
 			continue
 		}
 		result = append(result, domain.ServiceCategoryDTO{
-			ID:           item.ID,
+			ID:           itemID,
 			Name:         item.Name,
 			GuestAllowed: item.GuestAllowed,
 			TemplateID:   item.SurveyTemplateID,
@@ -604,10 +606,10 @@ func (service *ReportService) EntityServiceMatrix(period string, periods int) ([
 		for _, cat := range categories {
 			rows = append(rows, domain.EntityServiceDTO{
 				Entity:     entity,
-				CategoryID: cat.ID,
+				CategoryID: strconv.Itoa(cat.ID),
 				Category:   cat.Name,
-				Tickets:    ticketCounts[entity][cat.ID],
-				Surveys:    surveyCounts[entity][cat.ID],
+				Tickets:    ticketCounts[entity][strconv.Itoa(cat.ID)],
+				Surveys:    surveyCounts[entity][strconv.Itoa(cat.ID)],
 			})
 		}
 	}
@@ -640,7 +642,11 @@ func (service *ReportService) resolveTemplate(
 ) (*domain.SurveyTemplate, error) {
 	selectedTemplateID := strings.TrimSpace(templateID)
 	if selectedTemplateID == "" {
-		category, err := service.categories.FindByID(categoryID)
+		parsedID, err := strconv.Atoi(strings.TrimSpace(categoryID))
+		if err != nil || parsedID <= 0 {
+			return nil, gorm.ErrRecordNotFound
+		}
+		category, err := service.categories.FindByID(parsedID)
 		if err != nil {
 			return nil, err
 		}
@@ -661,14 +667,18 @@ func (service *ReportService) categoryNameMap() map[string]string {
 	categoryRows, err := service.categories.List()
 	if err == nil {
 		for _, cat := range categoryRows {
-			categories[cat.ID] = cat.Name
+			categories[strconv.Itoa(cat.ID)] = cat.Name
 		}
 	}
 	return categories
 }
 
 func (service *ReportService) resolveCategoryName(categoryID string) string {
-	category, err := service.categories.FindByID(categoryID)
+	parsedID, err := strconv.Atoi(strings.TrimSpace(categoryID))
+	if err != nil || parsedID <= 0 {
+		return categoryID
+	}
+	category, err := service.categories.FindByID(parsedID)
 	if err == nil && category.Name != "" {
 		return category.Name
 	}

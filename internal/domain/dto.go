@@ -8,38 +8,39 @@ import (
 
 type UserDTO struct {
 	ID     string   `json:"id"`
+	Username string `json:"username"`
 	Name   string   `json:"name"`
 	Email  string   `json:"email"`
 	Role   UserRole `json:"role"`
 	Entity string   `json:"entity"`
 }
 
-type TicketHistoryDTO struct {
-	Title       string    `json:"title"`
-	Description string    `json:"description"`
-	Timestamp   time.Time `json:"timestamp"`
-}
-
 type TicketDTO struct {
-	ID             string             `json:"id"`
-	TicketNumber   string             `json:"ticketNumber"`
-	UserID         string             `json:"userId,omitempty"`
-	ReporterName   string             `json:"reporterName"`
-	Email          string             `json:"email"`
-	Phone          string             `json:"phone,omitempty"`
-	Title          string             `json:"title"`
-	Description    string             `json:"description"`
-	Category       string             `json:"category"`
-	CategoryID     string             `json:"categoryId"`
-	Status         TicketStatus       `json:"status"`
-	Priority       TicketPriority     `json:"priority"`
-	CreatedAt      time.Time          `json:"createdAt"`
-	IsGuest        bool               `json:"isGuest"`
-	StaffNotes     string             `json:"staffNotes,omitempty"`
-	Attachments    []string           `json:"attachments"`
-	History        []TicketHistoryDTO `json:"history"`
-	SurveyRequired bool               `json:"surveyRequired"`
-	SurveyScore    float64            `json:"surveyScore"`
+	ID             string         `json:"id"`
+	TicketNumber   string         `json:"ticketNumber"`
+	TicketDate     time.Time      `json:"ticketDate"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	Username       string         `json:"username"`
+	NumberID       string         `json:"numberId"`
+	Name           string         `json:"name"`
+	Email          string         `json:"email"`
+	Entity         string         `json:"entity"`
+	ServiceID      int            `json:"serviceId"`
+	ServiceName    string         `json:"serviceName"`
+	CategoryID     string         `json:"categoryId"`
+	Category       string         `json:"category"`
+	Notes          string         `json:"notes"`
+	StaffNotes     string         `json:"staffNotes,omitempty"`
+	Priority       TicketPriority `json:"priority"`
+	Status         TicketStatus   `json:"status"`
+	IsReject       bool           `json:"isReject"`
+	IsAssign       bool           `json:"isAssign"`
+	IsDone         bool           `json:"isDone"`
+	IDStaff        string         `json:"idStaff,omitempty"`
+	Lamp1          string         `json:"lamp1,omitempty"`
+	Lamp2          string         `json:"lamp2,omitempty"`
+	SurveyRequired bool           `json:"surveyRequired"`
+	SurveyScore    float64        `json:"surveyScore"`
 }
 
 type TicketPageDTO struct {
@@ -197,10 +198,11 @@ type EntityServiceDTO struct {
 
 func ToUserDTO(user User) UserDTO {
 	return UserDTO{
-		ID:     user.ID,
-		Name:   user.Name,
-		Email:  user.Email,
-		Role:   user.Role,
-		Entity: user.Entity,
+		ID:       user.ID,
+		Username: user.Username,
+		Name:     user.Name,
+		Email:    user.Email,
+		Role:     user.Role,
+		Entity:   user.Entity,
 	}
 }

@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,27 +78,7 @@ func (service *SurveyService) CreateTemplate(req SurveyTemplateRequest) (domain.
 		UpdatedAt:   service.now(),
 	}
 
-	questions := make([]domain.SurveyQuestion, 0, len(req.Questions))
-	for _, question := range req.Questions {
-		if strings.TrimSpace(question.Text) == "" {
-			continue
-		}
-		questionID := strings.TrimSpace(question.ID)
-		if questionID == "" {
-			questionID = util.NewID(32)
-		}
-		options, _ := json.Marshal(question.Options)
-		questions = append(questions, domain.SurveyQuestion{
-			ID:         questionID,
-			TemplateID: template.ID,
-			Text:       strings.TrimSpace(question.Text),
-			Type:       domain.SurveyQuestionType(question.Type),
-			Options:    options,
-			CreatedAt:  service.now(),
-		})
-	}
-	template.Questions = questions
-
+	template.Questions = buildSurveyQuestions(req.Questions, template.ID, service.now())
 	if err := service.surveys.CreateTemplate(&template); err != nil {
 		return domain.SurveyTemplateDTO{}, err
 	}
@@ -121,9 +102,21 @@ func (service *SurveyService) UpdateTemplate(templateID string, req SurveyTempla
 	template.Description = strings.TrimSpace(req.Description)
 	template.Framework = strings.TrimSpace(req.Framework)
 	template.UpdatedAt = service.now()
+	template.Questions = buildSurveyQuestions(req.Questions, template.ID, service.now())
 
-	questions := make([]domain.SurveyQuestion, 0, len(req.Questions))
-	for _, question := range req.Questions {
+	if err := service.surveys.ReplaceTemplate(template); err != nil {
+		return domain.SurveyTemplateDTO{}, err
+	}
+	return mapSurveyTemplate(*template), nil
+}
+
+func buildSurveyQuestions(
+	requests []SurveyQuestionRequest,
+	templateID string,
+	createdAt time.Time,
+) []domain.SurveyQuestion {
+	questions := make([]domain.SurveyQuestion, 0, len(requests))
+	for _, question := range requests {
 		if strings.TrimSpace(question.Text) == "" {
 			continue
 		}
@@ -134,19 +127,14 @@ func (service *SurveyService) UpdateTemplate(templateID string, req SurveyTempla
 		options, _ := json.Marshal(question.Options)
 		questions = append(questions, domain.SurveyQuestion{
 			ID:         questionID,
-			TemplateID: template.ID,
+			TemplateID: templateID,
 			Text:       strings.TrimSpace(question.Text),
 			Type:       domain.SurveyQuestionType(question.Type),
 			Options:    options,
-			CreatedAt:  service.now(),
+			CreatedAt:  createdAt,
 		})
 	}
-	template.Questions = questions
-
-	if err := service.surveys.ReplaceTemplate(template); err != nil {
-		return domain.SurveyTemplateDTO{}, err
-	}
-	return mapSurveyTemplate(*template), nil
+	return questions
 }
 
 func (service *SurveyService) DeleteTemplate(templateID string) error {
@@ -160,18 +148,28 @@ func (service *SurveyService) SubmitSurvey(user domain.User, req SurveyResponseR
 	if user.Role != domain.RoleRegistered {
 		return errors.New("hanya pengguna terdaftar yang dapat mengisi survey")
 	}
-	if strings.TrimSpace(req.TicketID) == "" {
+
+	ticketID, err := strconv.Atoi(strings.TrimSpace(req.TicketID))
+	if err != nil || ticketID <= 0 {
 		return errors.New("ticket_id wajib diisi")
 	}
-	ticket, err := service.tickets.FindByID(req.TicketID)
+
+	ticket, err := service.tickets.FindByID(ticketID)
 	if err != nil {
 		return err
 	}
-	if ticket.UserID != user.ID {
+	if ticket.Status != domain.StatusDone {
+		return errors.New("survey hanya tersedia untuk tiket selesai")
+	}
+	if stringOrEmpty(ticket.Username) == "" || stringOrEmpty(ticket.NumberID) == "" {
+		return errors.New("survey tidak tersedia untuk tiket guest")
+	}
+	if stringOrEmpty(ticket.NumberID) != strings.TrimSpace(user.ID) {
 		return errors.New("tidak memiliki akses untuk tiket ini")
 	}
-	if ticket.Status != domain.StatusResolved {
-		return errors.New("survey hanya tersedia untuk tiket selesai")
+	if username := strings.TrimSpace(user.Username); username != "" &&
+		!strings.EqualFold(stringOrEmpty(ticket.Username), username) {
+		return errors.New("tidak memiliki akses untuk tiket ini")
 	}
 
 	hasResponse, err := service.surveys.HasResponse(ticket.ID, user.ID)
@@ -182,9 +180,9 @@ func (service *SurveyService) SubmitSurvey(user domain.User, req SurveyResponseR
 		return errors.New("survey sudah diisi")
 	}
 
-	template, err := service.surveys.FindByCategory(ticket.CategoryID)
+	template, err := service.surveys.FindByCategory(strconv.Itoa(ticket.ServiceID))
 	if err != nil || template == nil || strings.TrimSpace(template.ID) == "" {
-		return errors.New("template survei untuk kategori tiket tidak ditemukan")
+		return errors.New("template survei untuk layanan tiket tidak ditemukan")
 	}
 
 	responseID := util.NewID(32)
@@ -207,9 +205,7 @@ func (service *SurveyService) SubmitSurvey(user domain.User, req SurveyResponseR
 	}
 
 	ticket.SurveyRequired = false
-	_ = service.tickets.Update(ticket)
-
-	return nil
+	return service.tickets.Update(ticket)
 }
 
 func (service *SurveyService) ListResponsesPaged(
@@ -235,13 +231,13 @@ func (service *SurveyService) ListResponsesPaged(
 	for _, row := range rows {
 		items = append(items, domain.SurveyResponseItemDTO{
 			ID:         row.ID,
-			TicketID:   row.TicketID,
+			TicketID:   strconv.Itoa(row.TicketID),
 			UserID:     row.UserID,
 			UserName:   row.UserName,
 			UserEmail:  row.UserEmail,
 			UserEntity: row.UserEntity,
-			CategoryID: row.CategoryID,
-			Category:   row.CategoryName,
+			CategoryID: strconv.Itoa(row.ServiceID),
+			Category:   row.ServiceName,
 			TemplateID: row.TemplateID,
 			Template:   row.TemplateTitle,
 			Score:      scoreToFivePoint(row.Score),
@@ -290,10 +286,7 @@ func mapSurveyTemplate(template domain.SurveyTemplate) domain.SurveyTemplateDTO 
 }
 
 func calculateSurveyScore(answers map[string]interface{}, template *domain.SurveyTemplate) float64 {
-	if len(answers) == 0 {
-		return 0
-	}
-	if template == nil || len(template.Questions) == 0 {
+	if len(answers) == 0 || template == nil || len(template.Questions) == 0 {
 		return 0
 	}
 	var total float64

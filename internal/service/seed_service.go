@@ -5,25 +5,25 @@ import (
 )
 
 const (
-	CategoryInternet               = "CAT001"
-	CategorySIAKAD                 = "CAT002"
-	CategoryWebsite                = "CAT003"
-	CategorySistemInformasi        = "CAT004"
-	CategoryLainnya                = "CAT005"
-	CategoryGuestPassword          = "GST001"
-	CategoryGuestSSORegistration   = "GST002"
-	CategoryGuestEmailRegistration = "GST003"
+	CategoryGuestPassword        = domain.ServiceGuestPassword
+	CategoryGuestSSORegistration = domain.ServiceGuestRegistration
+	CategoryGuestEmail           = domain.ServiceGuestEmail
+	CategoryInternet             = domain.ServiceInternet
+	CategoryWebsite              = domain.ServiceWebsiteDown
+	CategorySistemInformasi      = domain.ServiceSistemInformasi
+	CategorySIAKAD               = domain.ServiceSIAKADU
+	CategoryLainnya              = domain.ServiceLainnya
 )
 
 func DefaultCategories() []domain.ServiceCategory {
 	return []domain.ServiceCategory{
-		{ID: CategoryInternet, Name: "Jaringan Internet", GuestAllowed: false},
-		{ID: CategorySIAKAD, Name: "SIAKAD", GuestAllowed: false},
-		{ID: CategoryWebsite, Name: "Website", GuestAllowed: false},
-		{ID: CategorySistemInformasi, Name: "Sistem Informasi", GuestAllowed: false},
-		{ID: CategoryLainnya, Name: "Lainnya", GuestAllowed: false},
 		{ID: CategoryGuestPassword, Name: "Lupa Password SSO", GuestAllowed: true},
 		{ID: CategoryGuestSSORegistration, Name: "Registrasi SSO", GuestAllowed: true},
-		{ID: CategoryGuestEmailRegistration, Name: "Registrasi Email @unila.ac.id", GuestAllowed: true},
+		{ID: CategoryGuestEmail, Name: "Email Resmi Unila", GuestAllowed: true},
+		{ID: CategoryInternet, Name: "Jaringan Internet", GuestAllowed: false},
+		{ID: CategoryWebsite, Name: "Website Down", GuestAllowed: false},
+		{ID: CategorySistemInformasi, Name: "Sistem Informasi", GuestAllowed: false},
+		{ID: CategorySIAKAD, Name: "SIAKADU", GuestAllowed: false},
+		{ID: CategoryLainnya, Name: "Lainnya", GuestAllowed: false},
 	}
 }

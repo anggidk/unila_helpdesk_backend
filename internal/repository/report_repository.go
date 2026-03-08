@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"strconv"
+	"strings"
 	"time"
 
 	"unila_helpdesk_backend/internal/domain"
@@ -49,10 +51,10 @@ func (repo *ReportRepository) ListActiveUsersInRange(userIDs []string, start tim
 		return activeUsers, nil
 	}
 	if err := repo.db.Model(&domain.SurveyResponse{}).
-		Where("user_id IN ?", userIDs).
+		Where("number_id IN ?", userIDs).
 		Where("created_at >= ? AND created_at < ?", start, end).
 		Distinct().
-		Pluck("user_id", &activeUsers).Error; err != nil {
+		Pluck("number_id", &activeUsers).Error; err != nil {
 		return nil, err
 	}
 	return activeUsers, nil
@@ -61,9 +63,9 @@ func (repo *ReportRepository) ListActiveUsersInRange(userIDs []string, start tim
 func (repo *ReportRepository) ListTicketTotalsByCategory(start time.Time, end time.Time) ([]CategoryCountRow, error) {
 	var rows []CategoryCountRow
 	if err := repo.db.Model(&domain.Ticket{}).
-		Select("category_id as category_id, count(*) as total").
-		Where("created_at >= ? AND created_at < ?", start, end).
-		Group("category_id").
+		Select("CAST(id_service AS text) AS category_id, count(*) AS total").
+		Where("ticket_date >= ? AND ticket_date < ?", start, end).
+		Group("id_service").
 		Order("total desc").
 		Find(&rows).Error; err != nil {
 		return nil, err
@@ -96,7 +98,7 @@ func (repo *ReportRepository) CountResolvedTicketsInRange(start time.Time, end t
 	var total int64
 	if err := repo.db.Model(&domain.Ticket{}).
 		Where("status = ?", resolvedStatus).
-		Where("updated_at >= ? AND updated_at < ?", start, end).
+		Where("ticket_date >= ? AND ticket_date < ?", start, end).
 		Count(&total).Error; err != nil {
 		return 0, err
 	}
@@ -117,15 +119,15 @@ func (repo *ReportRepository) AveragePositiveSurveyScore() (float64, error) {
 func (repo *ReportRepository) ListServiceSatisfactionRows(start time.Time, end time.Time) ([]ServiceSatisfactionRow, error) {
 	var rows []ServiceSatisfactionRow
 	if err := repo.db.Raw(`
-        SELECT t.category_id AS category_id,
-               COALESCE(AVG(sr.score), 0) AS avg_score,
-               COUNT(*) AS responses
-        FROM survey_responses sr
-        JOIN tickets t ON t.id = sr.ticket_id
-        WHERE sr.created_at >= ? AND sr.created_at < ?
-          AND sr.score > 0
-        GROUP BY t.category_id
-    `, start, end).Scan(&rows).Error; err != nil {
+		SELECT CAST(t.id_service AS text) AS category_id,
+		       COALESCE(AVG(sr.score), 0) AS avg_score,
+		       COUNT(*) AS responses
+		FROM survey_responses sr
+		JOIN tickets t ON t.id = sr.ticket_id
+		WHERE sr.created_at >= ? AND sr.created_at < ?
+		  AND sr.score > 0
+		GROUP BY t.id_service
+	`, start, end).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -152,12 +154,16 @@ func (repo *ReportRepository) ListSurveyResponsesByTicketCategoryAndTemplate(
 	query := repo.db.Model(&domain.SurveyResponse{}).
 		Joins("JOIN tickets t ON t.id = survey_responses.ticket_id").
 		Where("survey_responses.created_at >= ? AND survey_responses.created_at < ?", start, end)
-	if categoryID != "" {
-		query = query.Where("t.category_id = ?", categoryID)
+
+	if strings.TrimSpace(categoryID) != "" {
+		if serviceID, err := strconv.Atoi(strings.TrimSpace(categoryID)); err == nil && serviceID > 0 {
+			query = query.Where("t.id_service = ?", serviceID)
+		}
 	}
-	if templateID != "" {
-		query = query.Where("survey_responses.template_id = ?", templateID)
+	if strings.TrimSpace(templateID) != "" {
+		query = query.Where("survey_responses.template_id = ?", strings.TrimSpace(templateID))
 	}
+
 	orderBy := "survey_responses.created_at desc"
 	if orderAsc {
 		orderBy = "survey_responses.created_at asc"
@@ -184,10 +190,15 @@ func (repo *ReportRepository) ListResponseItemsByResponseIDs(responseIDs []strin
 
 func (repo *ReportRepository) ListUsedTemplateIDsByCategory(categoryID string) ([]string, error) {
 	usedIDs := make([]string, 0)
-	if err := repo.db.Model(&domain.SurveyResponse{}).
+	query := repo.db.Model(&domain.SurveyResponse{}).
 		Joins("JOIN tickets t ON t.id = survey_responses.ticket_id").
-		Where("t.category_id = ? AND survey_responses.template_id <> ''", categoryID).
-		Distinct().
+		Where("survey_responses.template_id <> ''")
+	if strings.TrimSpace(categoryID) != "" {
+		if serviceID, err := strconv.Atoi(strings.TrimSpace(categoryID)); err == nil && serviceID > 0 {
+			query = query.Where("t.id_service = ?", serviceID)
+		}
+	}
+	if err := query.Distinct().
 		Pluck("survey_responses.template_id", &usedIDs).Error; err != nil {
 		return nil, err
 	}
@@ -198,9 +209,8 @@ func (repo *ReportRepository) ListUsedCategoryIDs() ([]string, error) {
 	usedIDs := make([]string, 0)
 	if err := repo.db.Model(&domain.SurveyResponse{}).
 		Joins("JOIN tickets t ON t.id = survey_responses.ticket_id").
-		Where("t.category_id <> ''").
 		Distinct().
-		Pluck("t.category_id", &usedIDs).Error; err != nil {
+		Pluck("CAST(t.id_service AS text)", &usedIDs).Error; err != nil {
 		return nil, err
 	}
 	return usedIDs, nil
@@ -222,7 +232,7 @@ func (repo *ReportRepository) ListTemplatesByIDsWithQuestions(ids []string) ([]d
 func (repo *ReportRepository) CountTicketsInRange(start time.Time, end time.Time) (int64, error) {
 	var total int64
 	if err := repo.db.Model(&domain.Ticket{}).
-		Where("created_at >= ? AND created_at < ?", start, end).
+		Where("ticket_date >= ? AND ticket_date < ?", start, end).
 		Count(&total).Error; err != nil {
 		return 0, err
 	}
@@ -242,13 +252,14 @@ func (repo *ReportRepository) CountSurveysInRange(start time.Time, end time.Time
 func (repo *ReportRepository) ListRegisteredTicketRowsByEntityCategory(start time.Time, end time.Time) ([]EntityCategoryTotalRow, error) {
 	var rows []EntityCategoryTotalRow
 	if err := repo.db.Raw(`
-        SELECT u.entity AS entity, t.category_id AS category_id, COUNT(*) AS total
-        FROM tickets t
-        JOIN users u ON u.id = t.user_id
-        WHERE u.role = 'registered'
-          AND t.created_at >= ? AND t.created_at < ?
-        GROUP BY u.entity, t.category_id
-    `, start, end).Scan(&rows).Error; err != nil {
+		SELECT u.entity AS entity, CAST(t.id_service AS text) AS category_id, COUNT(*) AS total
+		FROM tickets t
+		JOIN users u ON u.id = t.number_id AND u.username = t.username
+		WHERE u.role = ?
+		  AND t.ticket_date >= ? AND t.ticket_date < ?
+		  AND t.username IS NOT NULL AND t.number_id IS NOT NULL
+		GROUP BY u.entity, t.id_service
+	`, domain.RoleRegistered, start, end).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -257,14 +268,14 @@ func (repo *ReportRepository) ListRegisteredTicketRowsByEntityCategory(start tim
 func (repo *ReportRepository) ListRegisteredSurveyRowsByEntityCategory(start time.Time, end time.Time) ([]EntityCategoryTotalRow, error) {
 	var rows []EntityCategoryTotalRow
 	if err := repo.db.Raw(`
-        SELECT u.entity AS entity, t.category_id AS category_id, COUNT(*) AS total
-        FROM survey_responses sr
-        JOIN users u ON u.id = sr.user_id
-        JOIN tickets t ON t.id = sr.ticket_id
-        WHERE u.role = 'registered'
-          AND sr.created_at >= ? AND sr.created_at < ?
-        GROUP BY u.entity, t.category_id
-    `, start, end).Scan(&rows).Error; err != nil {
+		SELECT u.entity AS entity, CAST(t.id_service AS text) AS category_id, COUNT(*) AS total
+		FROM survey_responses sr
+		JOIN users u ON u.id = sr.number_id
+		JOIN tickets t ON t.id = sr.ticket_id
+		WHERE u.role = ?
+		  AND sr.created_at >= ? AND sr.created_at < ?
+		GROUP BY u.entity, t.id_service
+	`, domain.RoleRegistered, start, end).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -286,10 +297,17 @@ func (repo *ReportRepository) ListRegisteredEntities() ([]string, error) {
 func (repo *ReportRepository) ListRegisteredCategories() ([]domain.ServiceCategory, error) {
 	var categories []domain.ServiceCategory
 	if err := repo.db.Model(&domain.ServiceCategory{}).
-		Where("guest_allowed = ?", false).
-		Order("name asc").
+		Where("id NOT IN ?", []int{
+			domain.ServiceGuestPassword,
+			domain.ServiceGuestRegistration,
+			domain.ServiceGuestEmail,
+		}).
+		Order("id asc").
 		Find(&categories).Error; err != nil {
 		return nil, err
+	}
+	for index := range categories {
+		categories[index].GuestAllowed = false
 	}
 	return categories, nil
 }

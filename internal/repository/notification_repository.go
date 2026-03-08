@@ -16,7 +16,7 @@ func NewNotificationRepository(db *gorm.DB) *NotificationRepository {
 
 func (repo *NotificationRepository) ListByUser(userID string) ([]domain.Notification, error) {
 	var notifications []domain.Notification
-	if err := repo.db.Where("user_id = ?", userID).Order("created_at desc").Find(&notifications).Error; err != nil {
+	if err := repo.db.Where("number_id = ?", userID).Order("created_at desc").Find(&notifications).Error; err != nil {
 		return nil, err
 	}
 	return notifications, nil
@@ -45,7 +45,7 @@ func (repo *FCMTokenRepository) Upsert(token *domain.FCMToken) error {
 
 func (repo *FCMTokenRepository) ListTokens(userID string) ([]domain.FCMToken, error) {
 	var tokens []domain.FCMToken
-	if err := repo.db.Where("user_id = ?", userID).Find(&tokens).Error; err != nil {
+	if err := repo.db.Where("number_id = ?", userID).Find(&tokens).Error; err != nil {
 		return nil, err
 	}
 	return tokens, nil
@@ -55,12 +55,12 @@ func (repo *FCMTokenRepository) DeleteByUserAndTokens(userID string, tokens []st
 	if userID == "" || len(tokens) == 0 {
 		return nil
 	}
-	return repo.db.Where("user_id = ? AND token IN ?", userID, tokens).Delete(&domain.FCMToken{}).Error
+	return repo.db.Where("number_id = ? AND token IN ?", userID, tokens).Delete(&domain.FCMToken{}).Error
 }
 
 func (repo *FCMTokenRepository) DeleteByUserAndToken(userID string, token string) error {
 	if userID == "" || token == "" {
 		return nil
 	}
-	return repo.db.Where("user_id = ? AND token = ?", userID, token).Delete(&domain.FCMToken{}).Error
+	return repo.db.Where("number_id = ? AND token = ?", userID, token).Delete(&domain.FCMToken{}).Error
 }

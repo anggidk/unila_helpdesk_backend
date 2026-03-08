@@ -89,61 +89,56 @@ func MustAutoMigrate(database *gorm.DB) {
 
 const migration20260209Baseline = `
 CREATE TABLE IF NOT EXISTS public.users (
-    id varchar(10) PRIMARY KEY,
-    username varchar(60) UNIQUE,
+    id varchar(25) PRIMARY KEY,
+    username varchar(64) UNIQUE,
     password_hash text,
-    name varchar(120),
-    email varchar(180) UNIQUE,
+    name varchar(100),
+    email varchar(255) UNIQUE,
     role varchar(20),
-    entity varchar(120),
+    entity varchar(20),
     is_active boolean DEFAULT true,
     created_at timestamptz,
     updated_at timestamptz,
     deleted_at timestamptz
 );
 
-CREATE TABLE IF NOT EXISTS public.service_categories (
-    id varchar(6) PRIMARY KEY,
-    name varchar(120),
-    guest_allowed boolean
+CREATE TABLE IF NOT EXISTS public.services (
+    id int PRIMARY KEY,
+    name varchar(120) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.staff (
+    id varchar(25) PRIMARY KEY,
+    username varchar(100) UNIQUE,
+    name varchar(100),
+    nip varchar(25),
+    divisi varchar(100),
+    role varchar(50),
+    photo varchar(255),
+    hp varchar(25)
 );
 
 CREATE TABLE IF NOT EXISTS public.tickets (
-    id varchar(32) PRIMARY KEY,
-    user_id varchar(10),
-    category_id varchar(6),
-    ticket_number varchar(20),
-    reporter_name varchar(120),
-    email varchar(180),
-    phone varchar(20),
-    is_guest boolean DEFAULT false,
-    title varchar(180),
-    description text,
-    priority varchar(20),
-    status varchar(20),
-    staff_notes text,
-    survey_required boolean DEFAULT false,
-    created_at timestamptz,
-    updated_at timestamptz,
-    deleted_at timestamptz
-);
-
-CREATE TABLE IF NOT EXISTS public.ticket_histories (
-    id varchar(64) PRIMARY KEY,
-    ticket_id varchar(32),
-    title varchar(120),
-    description text,
-    created_at timestamptz
-);
-
-CREATE TABLE IF NOT EXISTS public.attachments (
-    id varchar(32) PRIMARY KEY,
-    ticket_id varchar(32),
-    filename varchar(180),
-    content_type varchar(80),
-    size bigint,
-    data bytea,
-    created_at timestamptz
+    id bigserial PRIMARY KEY,
+    ticket_number varchar(6) NOT NULL,
+    ticket_date timestamptz NOT NULL,
+    username varchar(64),
+    number_id varchar(25) NOT NULL,
+    name varchar(100) NOT NULL,
+    email varchar(255) NOT NULL DEFAULT '',
+    entity varchar(20) NOT NULL,
+    id_service int NOT NULL,
+    notes text NOT NULL,
+    staff_notes text NOT NULL DEFAULT '',
+    priority varchar(20) NOT NULL,
+    is_reject boolean NOT NULL DEFAULT false,
+    is_assign boolean NOT NULL DEFAULT false,
+    is_done boolean NOT NULL DEFAULT false,
+    id_staff varchar(25),
+    status varchar(50) NOT NULL,
+    lamp1 varchar(255) NOT NULL DEFAULT '',
+    lamp2 varchar(255) NOT NULL DEFAULT '',
+    survey_required boolean NOT NULL DEFAULT false
 );
 
 CREATE TABLE IF NOT EXISTS public.survey_templates (
@@ -156,7 +151,7 @@ CREATE TABLE IF NOT EXISTS public.survey_templates (
 );
 
 CREATE TABLE IF NOT EXISTS public.category_templates (
-    category_id varchar(6) PRIMARY KEY,
+    category_id int PRIMARY KEY,
     template_id varchar(12) NOT NULL,
     assigned_at timestamptz
 );
@@ -172,8 +167,8 @@ CREATE TABLE IF NOT EXISTS public.survey_questions (
 
 CREATE TABLE IF NOT EXISTS public.survey_responses (
     id varchar(32) PRIMARY KEY,
-    user_id varchar(10),
-    ticket_id varchar(32),
+    number_id varchar(25),
+    ticket_id bigint,
     template_id varchar(12),
     score numeric,
     created_at timestamptz
@@ -190,8 +185,8 @@ CREATE TABLE IF NOT EXISTS public.survey_response_items (
 
 CREATE TABLE IF NOT EXISTS public.notifications (
     id varchar(64) PRIMARY KEY,
-    user_id varchar(10),
-    ticket_id varchar(32),
+    number_id varchar(25),
+    ticket_id bigint,
     title varchar(160),
     message text,
     is_read boolean DEFAULT false,
@@ -200,7 +195,7 @@ CREATE TABLE IF NOT EXISTS public.notifications (
 
 CREATE TABLE IF NOT EXISTS public.fcm_tokens (
     id varchar(64) PRIMARY KEY,
-    user_id varchar(10),
+    number_id varchar(25),
     token text,
     created_at timestamptz,
     updated_at timestamptz
@@ -208,7 +203,7 @@ CREATE TABLE IF NOT EXISTS public.fcm_tokens (
 
 CREATE TABLE IF NOT EXISTS public.refresh_tokens (
     id varchar(64) PRIMARY KEY,
-    user_id varchar(10),
+    number_id varchar(25),
     token_hash varchar(64),
     expires_at timestamptz,
     created_at timestamptz
@@ -216,24 +211,50 @@ CREATE TABLE IF NOT EXISTS public.refresh_tokens (
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_attachments_ticket_id') THEN
-        ALTER TABLE public.attachments
-            ADD CONSTRAINT fk_attachments_ticket_id
-            FOREIGN KEY (ticket_id) REFERENCES public.tickets(id)
-            ON UPDATE NO ACTION ON DELETE CASCADE;
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_users_id_username')
+        AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ux_users_id_username') THEN
+        ALTER TABLE public.users
+            RENAME CONSTRAINT uq_users_id_username TO ux_users_id_username;
+    ELSIF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ux_users_id_username') THEN
+        ALTER TABLE public.users
+            ADD CONSTRAINT ux_users_id_username UNIQUE (id, username);
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_fcm_tokens_user_id') THEN
-        ALTER TABLE public.fcm_tokens
-            ADD CONSTRAINT fk_fcm_tokens_user_id
-            FOREIGN KEY (user_id) REFERENCES public.users(id)
-            ON UPDATE NO ACTION ON DELETE CASCADE;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tickets_service_id') THEN
+        ALTER TABLE public.tickets
+            ADD CONSTRAINT fk_tickets_service_id
+            FOREIGN KEY (id_service) REFERENCES public.services(id)
+            ON UPDATE NO ACTION ON DELETE NO ACTION;
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_notifications_user_id') THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tickets_staff_id') THEN
+        ALTER TABLE public.tickets
+            ADD CONSTRAINT fk_tickets_staff_id
+            FOREIGN KEY (id_staff) REFERENCES public.staff(id)
+            ON UPDATE NO ACTION ON DELETE SET NULL;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tickets_number_id') THEN
+        ALTER TABLE public.tickets
+            DROP CONSTRAINT fk_tickets_number_id;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tickets_user_id') THEN
+        ALTER TABLE public.tickets
+            DROP CONSTRAINT fk_tickets_user_id;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tickets_number_id_username') THEN
+        ALTER TABLE public.tickets
+            ADD CONSTRAINT fk_tickets_number_id_username
+            FOREIGN KEY (number_id, username) REFERENCES public.users(id, username)
+            ON UPDATE NO ACTION ON DELETE NO ACTION;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_notifications_number_id') THEN
         ALTER TABLE public.notifications
-            ADD CONSTRAINT fk_notifications_user_id
-            FOREIGN KEY (user_id) REFERENCES public.users(id)
+            ADD CONSTRAINT fk_notifications_number_id
+            FOREIGN KEY (number_id) REFERENCES public.users(id)
             ON UPDATE NO ACTION ON DELETE CASCADE;
     END IF;
 
@@ -244,10 +265,31 @@ BEGIN
             ON UPDATE NO ACTION ON DELETE CASCADE;
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_refresh_tokens_user_id') THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_fcm_tokens_number_id') THEN
+        ALTER TABLE public.fcm_tokens
+            ADD CONSTRAINT fk_fcm_tokens_number_id
+            FOREIGN KEY (number_id) REFERENCES public.users(id)
+            ON UPDATE NO ACTION ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_refresh_tokens_number_id') THEN
         ALTER TABLE public.refresh_tokens
-            ADD CONSTRAINT fk_refresh_tokens_user_id
-            FOREIGN KEY (user_id) REFERENCES public.users(id)
+            ADD CONSTRAINT fk_refresh_tokens_number_id
+            FOREIGN KEY (number_id) REFERENCES public.users(id)
+            ON UPDATE NO ACTION ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_category_templates_category_id') THEN
+        ALTER TABLE public.category_templates
+            ADD CONSTRAINT fk_category_templates_category_id
+            FOREIGN KEY (category_id) REFERENCES public.services(id)
+            ON UPDATE NO ACTION ON DELETE CASCADE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_category_templates_template_id') THEN
+        ALTER TABLE public.category_templates
+            ADD CONSTRAINT fk_category_templates_template_id
+            FOREIGN KEY (template_id) REFERENCES public.survey_templates(id)
             ON UPDATE NO ACTION ON DELETE CASCADE;
     END IF;
 
@@ -265,10 +307,10 @@ BEGIN
             ON UPDATE NO ACTION ON DELETE CASCADE;
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_survey_responses_user_id') THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_survey_responses_number_id') THEN
         ALTER TABLE public.survey_responses
-            ADD CONSTRAINT fk_survey_responses_user_id
-            FOREIGN KEY (user_id) REFERENCES public.users(id)
+            ADD CONSTRAINT fk_survey_responses_number_id
+            FOREIGN KEY (number_id) REFERENCES public.users(id)
             ON UPDATE NO ACTION ON DELETE CASCADE;
     END IF;
 
@@ -292,77 +334,69 @@ BEGIN
             FOREIGN KEY (question_id) REFERENCES public.survey_questions(id)
             ON UPDATE NO ACTION ON DELETE NO ACTION;
     END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_ticket_histories_ticket_id') THEN
-        ALTER TABLE public.ticket_histories
-            ADD CONSTRAINT fk_ticket_histories_ticket_id
-            FOREIGN KEY (ticket_id) REFERENCES public.tickets(id)
-            ON UPDATE NO ACTION ON DELETE CASCADE;
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tickets_user_id') THEN
-        ALTER TABLE public.tickets
-            ADD CONSTRAINT fk_tickets_user_id
-            FOREIGN KEY (user_id) REFERENCES public.users(id)
-            ON UPDATE NO ACTION ON DELETE SET NULL;
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tickets_category_id') THEN
-        ALTER TABLE public.tickets
-            ADD CONSTRAINT fk_tickets_category_id
-            FOREIGN KEY (category_id) REFERENCES public.service_categories(id)
-            ON UPDATE NO ACTION ON DELETE NO ACTION;
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_category_templates_category_id') THEN
-        ALTER TABLE public.category_templates
-            ADD CONSTRAINT fk_category_templates_category_id
-            FOREIGN KEY (category_id) REFERENCES public.service_categories(id)
-            ON UPDATE NO ACTION ON DELETE CASCADE;
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_category_templates_template_id') THEN
-        ALTER TABLE public.category_templates
-            ADD CONSTRAINT fk_category_templates_template_id
-            FOREIGN KEY (template_id) REFERENCES public.survey_templates(id)
-            ON UPDATE NO ACTION ON DELETE CASCADE;
-    END IF;
 END $$;
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_tickets_guest_identity') THEN
-        ALTER TABLE public.tickets
-            ADD CONSTRAINT chk_tickets_guest_identity
-            CHECK (
-                is_guest = false OR
-                (user_id IS NULL AND email IS NOT NULL AND phone IS NOT NULL)
-            );
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_users_entity_values') THEN
+        ALTER TABLE public.users
+            ADD CONSTRAINT chk_users_entity_values
+            CHECK (entity IN ('DOSEN', 'TENDIK', 'MAHASISWA', 'LAINNYA'));
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_tickets_registered_user') THEN
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_tickets_entity_values') THEN
         ALTER TABLE public.tickets
-            ADD CONSTRAINT chk_tickets_registered_user
+            ADD CONSTRAINT chk_tickets_entity_values
+            CHECK (entity IN ('DOSEN', 'TENDIK', 'MAHASISWA', 'LAINNYA'));
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_tickets_priority_values') THEN
+        ALTER TABLE public.tickets
+            ADD CONSTRAINT chk_tickets_priority_values
+            CHECK (priority IN ('LOW', 'MEDIUM', 'HIGH'));
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_tickets_status_values') THEN
+        ALTER TABLE public.tickets
+            ADD CONSTRAINT chk_tickets_status_values
+            CHECK (status IN ('WAITING', 'ASSIGN', 'DONE', 'REJECT'));
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_tickets_guest_marker') THEN
+        ALTER TABLE public.tickets
+            ADD CONSTRAINT chk_tickets_guest_marker
             CHECK (
-                is_guest = true OR user_id IS NOT NULL
+                NULLIF(BTRIM(number_id), '') IS NOT NULL AND
+                (username IS NULL OR NULLIF(BTRIM(username), '') IS NOT NULL)
             );
     END IF;
 END $$;
 
+INSERT INTO public.services (id, name) VALUES
+    (1, 'Lupa Password SSO'),
+    (2, 'Registrasi SSO'),
+    (3, 'Email Resmi Unila'),
+    (4, 'Jaringan Internet'),
+    (5, 'Website Down'),
+    (6, 'Sistem Informasi'),
+    (7, 'SIAKADU'),
+    (99, 'Lainnya')
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
+
 CREATE UNIQUE INDEX IF NOT EXISTS ux_tickets_ticket_number ON public.tickets(ticket_number);
-CREATE INDEX IF NOT EXISTS ix_tickets_user_id ON public.tickets(user_id);
-CREATE INDEX IF NOT EXISTS ix_tickets_category_id ON public.tickets(category_id);
+CREATE INDEX IF NOT EXISTS ix_tickets_ticket_date ON public.tickets(ticket_date);
+CREATE INDEX IF NOT EXISTS ix_tickets_service_id ON public.tickets(id_service);
 CREATE INDEX IF NOT EXISTS ix_tickets_status ON public.tickets(status);
-CREATE INDEX IF NOT EXISTS ix_tickets_created_at ON public.tickets(created_at);
-CREATE INDEX IF NOT EXISTS ix_attachments_ticket_id ON public.attachments(ticket_id);
-CREATE INDEX IF NOT EXISTS ix_ticket_histories_ticket_id_created_at ON public.ticket_histories(ticket_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_tickets_username ON public.tickets(username);
+CREATE INDEX IF NOT EXISTS ix_tickets_number_id ON public.tickets(number_id);
 CREATE INDEX IF NOT EXISTS ix_survey_responses_ticket_id ON public.survey_responses(ticket_id);
-CREATE INDEX IF NOT EXISTS ix_survey_responses_user_id ON public.survey_responses(user_id);
+CREATE INDEX IF NOT EXISTS ix_survey_responses_number_id ON public.survey_responses(number_id);
 CREATE INDEX IF NOT EXISTS ix_survey_responses_template_id ON public.survey_responses(template_id);
 CREATE INDEX IF NOT EXISTS ix_survey_response_items_response_id ON public.survey_response_items(response_id);
 CREATE INDEX IF NOT EXISTS ix_survey_response_items_question_id ON public.survey_response_items(question_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_survey_response_items_response_question ON public.survey_response_items(response_id, question_id);
 CREATE INDEX IF NOT EXISTS ix_category_templates_template_id ON public.category_templates(template_id);
-CREATE INDEX IF NOT EXISTS ix_refresh_tokens_user_id ON public.refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS ix_refresh_tokens_number_id ON public.refresh_tokens(number_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_refresh_tokens_token_hash ON public.refresh_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_expires_at ON public.refresh_tokens(expires_at);
 `

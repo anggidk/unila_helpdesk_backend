@@ -53,12 +53,11 @@ func main() {
 	notificationRepo := repository.NewNotificationRepository(database)
 	tokenRepo := repository.NewFCMTokenRepository(database)
 	refreshTokenRepo := repository.NewRefreshTokenRepository(database)
-	attachmentRepo := repository.NewAttachmentRepository(database)
 	reportRepo := repository.NewReportRepository(database)
 
 	for _, category := range service.DefaultCategories() {
 		if err := categoryRepo.Upsert(category); err != nil {
-			log.Fatalf("seed category '%s' failed: %v", category.ID, err)
+			log.Fatalf("seed category '%d' failed: %v", category.ID, err)
 		}
 	}
 
@@ -70,9 +69,7 @@ func main() {
 		categoryRepo,
 		notificationRepo,
 		tokenRepo,
-		attachmentRepo,
 		fcmClient,
-		cfg.BaseURL,
 		domain.TicketStatus(cfg.TicketInitialStatus),
 	)
 	surveyService := service.NewSurveyService(surveyRepo, ticketRepo)
@@ -85,7 +82,7 @@ func main() {
 	surveyHandler := handler.NewSurveyHandler(surveyService)
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 	reportHandler := handler.NewReportHandler(reportService)
-	uploadHandler := handler.NewUploadHandler(cfg.BaseURL, attachmentRepo)
+	uploadHandler := handler.NewUploadHandler(cfg.BaseURL)
 
 	router := gin.Default()
 	router.MaxMultipartMemory = 8 << 20

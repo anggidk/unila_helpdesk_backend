@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"strconv"
+	"strings"
 	"time"
 
 	"unila_helpdesk_backend/internal/domain"
@@ -23,7 +25,7 @@ type SurveyResponseFilter struct {
 
 type SurveyResponseRow struct {
 	ID            string
-	TicketID      string
+	TicketID      int
 	UserID        string
 	TemplateID    string
 	Score         float64
@@ -31,8 +33,8 @@ type SurveyResponseRow struct {
 	UserName      string
 	UserEmail     string
 	UserEntity    string
-	CategoryID    string
-	CategoryName  string
+	ServiceID     int
+	ServiceName   string
 	TemplateTitle string
 }
 
@@ -49,10 +51,16 @@ func (repo *SurveyRepository) ListTemplates() ([]domain.SurveyTemplate, error) {
 }
 
 func (repo *SurveyRepository) FindByCategory(categoryID string) (*domain.SurveyTemplate, error) {
-	var mapping domain.CategoryTemplate
-	if err := repo.db.First(&mapping, "category_id = ?", categoryID).Error; err != nil {
+	parsedID, err := strconv.Atoi(strings.TrimSpace(categoryID))
+	if err != nil || parsedID <= 0 {
 		return nil, gorm.ErrRecordNotFound
 	}
+
+	var mapping domain.CategoryTemplate
+	if err := repo.db.First(&mapping, "category_id = ?", parsedID).Error; err != nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+
 	var template domain.SurveyTemplate
 	if err := repo.db.Preload("Questions").
 		First(&template, "id = ?", mapping.TemplateID).Error; err != nil {
@@ -90,15 +98,13 @@ func (repo *SurveyRepository) ReplaceTemplate(template *domain.SurveyTemplate) e
 		}
 
 		incomingQuestionIDs := make([]string, 0, len(template.Questions))
-		if len(template.Questions) > 0 {
-			for _, question := range template.Questions {
-				incomingQuestionIDs = append(incomingQuestionIDs, question.ID)
-				if err := tx.Clauses(clause.OnConflict{
-					Columns:   []clause.Column{{Name: "id"}},
-					DoUpdates: clause.AssignmentColumns([]string{"template_id", "text", "type", "options"}),
-				}).Create(&question).Error; err != nil {
-					return err
-				}
+		for _, question := range template.Questions {
+			incomingQuestionIDs = append(incomingQuestionIDs, question.ID)
+			if err := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "id"}},
+				DoUpdates: clause.AssignmentColumns([]string{"template_id", "text", "type", "options"}),
+			}).Create(&question).Error; err != nil {
+				return err
 			}
 		}
 
@@ -107,10 +113,7 @@ func (repo *SurveyRepository) ReplaceTemplate(template *domain.SurveyTemplate) e
 		if len(incomingQuestionIDs) > 0 {
 			deleteQuery = deleteQuery.Where("id NOT IN ?", incomingQuestionIDs)
 		}
-		if err := deleteQuery.Delete(&domain.SurveyQuestion{}).Error; err != nil {
-			return err
-		}
-		return nil
+		return deleteQuery.Delete(&domain.SurveyQuestion{}).Error
 	})
 }
 
@@ -147,9 +150,11 @@ func (repo *SurveyRepository) SaveResponse(
 	})
 }
 
-func (repo *SurveyRepository) HasResponse(ticketID string, userID string) (bool, error) {
+func (repo *SurveyRepository) HasResponse(ticketID int, userID string) (bool, error) {
 	var count int64
-	if err := repo.db.Model(&domain.SurveyResponse{}).Where("ticket_id = ? AND user_id = ?", ticketID, userID).Count(&count).Error; err != nil {
+	if err := repo.db.Model(&domain.SurveyResponse{}).
+		Where("ticket_id = ? AND number_id = ?", ticketID, userID).
+		Count(&count).Error; err != nil {
 		return false, err
 	}
 	return count > 0, nil
@@ -168,20 +173,22 @@ func (repo *SurveyRepository) ListResponses(
 	}
 
 	base := repo.db.Table("survey_responses sr").
-		Joins("JOIN users u ON u.id = sr.user_id").
+		Joins("JOIN users u ON u.id = sr.number_id").
 		Joins("JOIN tickets t ON t.id = sr.ticket_id").
-		Joins("LEFT JOIN service_categories sc ON sc.id = t.category_id").
+		Joins("LEFT JOIN services s ON s.id = t.id_service").
 		Joins("LEFT JOIN survey_templates st ON st.id = sr.template_id")
 
-	if filter.Query != "" {
-		like := "%" + filter.Query + "%"
-		base = base.Where("sr.ticket_id ILIKE ? OR u.name ILIKE ? OR u.email ILIKE ?", like, like, like)
+	if strings.TrimSpace(filter.Query) != "" {
+		like := "%" + strings.TrimSpace(filter.Query) + "%"
+		base = base.Where("CAST(sr.ticket_id AS text) ILIKE ? OR u.name ILIKE ? OR u.email ILIKE ?", like, like, like)
 	}
-	if filter.CategoryID != "" {
-		base = base.Where("t.category_id = ?", filter.CategoryID)
+	if strings.TrimSpace(filter.CategoryID) != "" {
+		if serviceID, err := strconv.Atoi(strings.TrimSpace(filter.CategoryID)); err == nil && serviceID > 0 {
+			base = base.Where("t.id_service = ?", serviceID)
+		}
 	}
-	if filter.TemplateID != "" {
-		base = base.Where("sr.template_id = ?", filter.TemplateID)
+	if strings.TrimSpace(filter.TemplateID) != "" {
+		base = base.Where("sr.template_id = ?", strings.TrimSpace(filter.TemplateID))
 	}
 	if filter.Start != nil {
 		base = base.Where("sr.created_at >= ?", *filter.Start)
@@ -197,19 +204,19 @@ func (repo *SurveyRepository) ListResponses(
 
 	var rows []SurveyResponseRow
 	if err := base.Select(`
-            sr.id,
-            sr.ticket_id,
-            sr.user_id,
-            sr.template_id,
-            sr.score,
-            sr.created_at,
-            u.name as user_name,
-            u.email as user_email,
-            u.entity as user_entity,
-            t.category_id as category_id,
-            sc.name as category_name,
-            st.title as template_title
-        `).
+			sr.id,
+			sr.ticket_id,
+			sr.number_id AS user_id,
+			sr.template_id,
+			sr.score,
+			sr.created_at,
+			u.name AS user_name,
+			u.email AS user_email,
+			u.entity AS user_entity,
+			t.id_service AS service_id,
+			s.name AS service_name,
+			st.title AS template_title
+		`).
 		Order("sr.created_at desc").
 		Limit(limit).
 		Offset((page - 1) * limit).

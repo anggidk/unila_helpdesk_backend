@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,89 +29,102 @@ func NewTicketRepository(db *gorm.DB) *TicketRepository {
 }
 
 func (repo *TicketRepository) Create(ticket *domain.Ticket) error {
-	values := map[string]any{
-		"id":              ticket.ID,
-		"ticket_number":   ticket.TicketNumber,
-		"user_id":         nullableTrimmed(ticket.UserID),
-		"reporter_name":   strings.TrimSpace(ticket.ReporterName),
-		"email":           strings.TrimSpace(ticket.Email),
-		"phone":           ticket.Phone,
-		"is_guest":        ticket.IsGuest,
-		"title":           strings.TrimSpace(ticket.Title),
-		"description":     strings.TrimSpace(ticket.Description),
-		"category_id":     strings.TrimSpace(ticket.CategoryID),
-		"priority":        ticket.Priority,
-		"status":          ticket.Status,
-		"staff_notes":     strings.TrimSpace(ticket.StaffNotes),
-		"survey_required": ticket.SurveyRequired,
-		"created_at":      ticket.CreatedAt,
-		"updated_at":      ticket.UpdatedAt,
-	}
-	return repo.db.Model(&domain.Ticket{}).Create(values).Error
+	return repo.db.Create(ticket).Error
 }
 
 func (repo *TicketRepository) Update(ticket *domain.Ticket) error {
 	updates := map[string]any{
 		"ticket_number":   ticket.TicketNumber,
-		"user_id":         nullableTrimmed(ticket.UserID),
-		"reporter_name":   strings.TrimSpace(ticket.ReporterName),
+		"ticket_date":     ticket.CreatedAt,
+		"username":        nullableStringValue(ticket.Username),
+		"number_id":       nullableStringValue(ticket.NumberID),
+		"name":            strings.TrimSpace(ticket.Name),
 		"email":           strings.TrimSpace(ticket.Email),
-		"phone":           ticket.Phone,
-		"is_guest":        ticket.IsGuest,
-		"title":           strings.TrimSpace(ticket.Title),
-		"description":     strings.TrimSpace(ticket.Description),
-		"category_id":     strings.TrimSpace(ticket.CategoryID),
-		"priority":        ticket.Priority,
-		"status":          ticket.Status,
+		"entity":          strings.TrimSpace(ticket.Entity),
+		"id_service":      ticket.ServiceID,
+		"notes":           strings.TrimSpace(ticket.Notes),
 		"staff_notes":     strings.TrimSpace(ticket.StaffNotes),
+		"priority":        ticket.Priority,
+		"is_reject":       ticket.IsReject,
+		"is_assign":       ticket.IsAssign,
+		"is_done":         ticket.IsDone,
+		"id_staff":        nullableTrimmed(ticket.StaffID),
+		"status":          ticket.Status,
+		"lamp1":           strings.TrimSpace(ticket.Lamp1),
+		"lamp2":           strings.TrimSpace(ticket.Lamp2),
 		"survey_required": ticket.SurveyRequired,
-		"updated_at":      ticket.UpdatedAt,
 	}
 	return repo.db.Model(&domain.Ticket{}).Where("id = ?", ticket.ID).Updates(updates).Error
 }
 
-func (repo *TicketRepository) SoftDelete(ticketID string) error {
+func nullableTrimmed(value *string) any {
+	if value == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return nil
+	}
+	return trimmed
+}
+
+func nullableStringValue(value *string) any {
+	return nullableTrimmed(value)
+}
+
+func (repo *TicketRepository) SoftDelete(ticketID int) error {
 	return repo.db.Delete(&domain.Ticket{}, "id = ?", ticketID).Error
 }
 
-func (repo *TicketRepository) FindByID(ticketID string) (*domain.Ticket, error) {
+func (repo *TicketRepository) FindByID(ticketID int) (*domain.Ticket, error) {
 	var ticket domain.Ticket
-	if err := repo.db.Preload("Category").Preload("History", func(db *gorm.DB) *gorm.DB {
-		return db.Order("created_at desc")
-	}).First(&ticket, "id = ?", ticketID).Error; err != nil {
+	if err := repo.db.Preload("Service").First(&ticket, "id = ?", ticketID).Error; err != nil {
 		return nil, err
 	}
+	ticket.Service.GuestAllowed = serviceIsGuestAllowed(ticket.Service.ID)
 	return &ticket, nil
 }
 
-func (repo *TicketRepository) ListByUser(userID string) ([]domain.Ticket, error) {
+func (repo *TicketRepository) ListByUser(user domain.User) ([]domain.Ticket, error) {
 	var tickets []domain.Ticket
-	if err := repo.db.Preload("Category").Where("user_id = ?", userID).Order("created_at desc").Find(&tickets).Error; err != nil {
+	if err := repo.db.Preload("Service").
+		Where("number_id = ? AND username = ?", user.ID, user.Username).
+		Order("ticket_date desc").
+		Find(&tickets).Error; err != nil {
 		return nil, err
+	}
+	for index := range tickets {
+		tickets[index].Service.GuestAllowed = serviceIsGuestAllowed(tickets[index].Service.ID)
 	}
 	return tickets, nil
 }
 
 func (repo *TicketRepository) ListAll() ([]domain.Ticket, error) {
 	var tickets []domain.Ticket
-	if err := repo.db.Preload("Category").Order("created_at desc").Find(&tickets).Error; err != nil {
+	if err := repo.db.Preload("Service").Order("ticket_date desc").Find(&tickets).Error; err != nil {
 		return nil, err
+	}
+	for index := range tickets {
+		tickets[index].Service.GuestAllowed = serviceIsGuestAllowed(tickets[index].Service.ID)
 	}
 	return tickets, nil
 }
 
-func (repo *TicketRepository) Search(query string, isGuest bool) ([]domain.Ticket, error) {
+func (repo *TicketRepository) Search(query string, guestOnly bool) ([]domain.Ticket, error) {
 	var tickets []domain.Ticket
-	qb := repo.db.Preload("Category").Order("created_at desc")
-	if query != "" {
-		like := "%" + query + "%"
-		qb = qb.Where("id ILIKE ? OR ticket_number ILIKE ? OR title ILIKE ?", like, like, like)
+	qb := repo.db.Preload("Service").Order("ticket_date desc")
+	if guestOnly {
+		qb = qb.Where("username IS NULL")
 	}
-	if isGuest {
-		qb = qb.Where("is_guest = ?", true)
+	if strings.TrimSpace(query) != "" {
+		like := "%" + strings.TrimSpace(query) + "%"
+		qb = qb.Where("CAST(id AS text) ILIKE ? OR ticket_number ILIKE ? OR notes ILIKE ? OR name ILIKE ? OR email ILIKE ?", like, like, like, like, like)
 	}
 	if err := qb.Find(&tickets).Error; err != nil {
 		return nil, err
+	}
+	for index := range tickets {
+		tickets[index].Service.GuestAllowed = serviceIsGuestAllowed(tickets[index].Service.ID)
 	}
 	return tickets, nil
 }
@@ -129,27 +142,33 @@ func (repo *TicketRepository) ListFiltered(
 	}
 
 	qb := repo.db.Model(&domain.Ticket{})
-	if filter.Query != "" {
-		like := "%" + filter.Query + "%"
-		qb = qb.Where("id ILIKE ? OR ticket_number ILIKE ? OR title ILIKE ? OR reporter_name ILIKE ? OR email ILIKE ?", like, like, like, like, like)
+	if strings.TrimSpace(filter.Query) != "" {
+		like := "%" + strings.TrimSpace(filter.Query) + "%"
+		qb = qb.Where("CAST(id AS text) ILIKE ? OR ticket_number ILIKE ? OR notes ILIKE ? OR name ILIKE ? OR email ILIKE ?", like, like, like, like, like)
 	}
 	if filter.Status != nil {
 		qb = qb.Where("status = ?", *filter.Status)
 	}
-	if filter.CategoryID != "" {
-		qb = qb.Where("category_id = ?", filter.CategoryID)
+	if strings.TrimSpace(filter.CategoryID) != "" {
+		if serviceID, err := strconv.Atoi(strings.TrimSpace(filter.CategoryID)); err == nil && serviceID > 0 {
+			qb = qb.Where("id_service = ?", serviceID)
+		}
 	}
-	if filter.UserID != "" {
-		qb = qb.Where("user_id = ?", filter.UserID)
+	if strings.TrimSpace(filter.UserID) != "" {
+		qb = qb.Where("number_id = ?", strings.TrimSpace(filter.UserID))
 	}
 	if filter.IsGuest != nil {
-		qb = qb.Where("is_guest = ?", *filter.IsGuest)
+		if *filter.IsGuest {
+			qb = qb.Where("username IS NULL")
+		} else {
+			qb = qb.Where("username IS NOT NULL")
+		}
 	}
 	if filter.Start != nil {
-		qb = qb.Where("created_at >= ?", *filter.Start)
+		qb = qb.Where("ticket_date >= ?", *filter.Start)
 	}
 	if filter.End != nil {
-		qb = qb.Where("created_at < ?", *filter.End)
+		qb = qb.Where("ticket_date < ?", *filter.End)
 	}
 
 	var total int64
@@ -158,74 +177,45 @@ func (repo *TicketRepository) ListFiltered(
 	}
 
 	var tickets []domain.Ticket
-	if err := qb.Preload("Category").
-		Order("created_at desc").
+	if err := qb.Preload("Service").
+		Order("ticket_date desc").
 		Limit(limit).
 		Offset((page - 1) * limit).
 		Find(&tickets).Error; err != nil {
 		return nil, 0, err
 	}
+	for index := range tickets {
+		tickets[index].Service.GuestAllowed = serviceIsGuestAllowed(tickets[index].Service.ID)
+	}
 	return tickets, total, nil
 }
 
-func (repo *TicketRepository) NextTicketSequence(year int) (int64, error) {
-	seqName := fmt.Sprintf("ticket_seq_%d", year)
-	createSQL := fmt.Sprintf(
-		"CREATE SEQUENCE IF NOT EXISTS %s INCREMENT BY 1 MINVALUE 1 START WITH 1",
-		seqName,
-	)
-	if err := repo.db.Exec(createSQL).Error; err != nil {
-		return 0, err
+func (repo *TicketRepository) ExistsTicketNumber(ticketNumber string) (bool, error) {
+	var count int64
+	if err := repo.db.Model(&domain.Ticket{}).Where("ticket_number = ?", strings.TrimSpace(ticketNumber)).Count(&count).Error; err != nil {
+		return false, err
 	}
-
-	likePattern := fmt.Sprintf("TK-%d-%%", year)
-	var maxExisting int64
-	if err := repo.db.Unscoped().
-		Model(&domain.Ticket{}).
-		Where("ticket_number LIKE ?", likePattern).
-		Select("COALESCE(MAX(CASE WHEN split_part(ticket_number, '-', 3) ~ '^[0-9]+$' THEN split_part(ticket_number, '-', 3)::bigint ELSE 0 END), 0)").
-		Scan(&maxExisting).Error; err != nil {
-		return 0, err
-	}
-
-	// Keep sequence aligned with existing historical IDs without moving backward.
-	if maxExisting > 0 {
-		alignSQL := fmt.Sprintf(
-			"SELECT setval('%s', GREATEST((SELECT last_value FROM %s), $1), true)",
-			seqName,
-			seqName,
-		)
-		if err := repo.db.Exec(alignSQL, maxExisting).Error; err != nil {
-			return 0, err
-		}
-	}
-
-	nextSQL := fmt.Sprintf("SELECT nextval('%s')", seqName)
-	var next int64
-	if err := repo.db.Raw(nextSQL).Scan(&next).Error; err != nil {
-		return 0, err
-	}
-	return next, nil
+	return count > 0, nil
 }
 
-func (repo *TicketRepository) AddHistory(history *domain.TicketHistory) error {
-	return repo.db.Create(history).Error
-}
-
-func (repo *TicketRepository) UpdateStatus(ticketID string, status domain.TicketStatus, surveyRequired bool) error {
+func (repo *TicketRepository) UpdateStatus(ticketID int, status domain.TicketStatus, surveyRequired bool) error {
+	isAssign, isDone, isReject := ticketStatusFlags(status)
 	return repo.db.Model(&domain.Ticket{}).Where("id = ?", ticketID).Updates(map[string]any{
 		"status":          status,
+		"is_assign":       isAssign,
+		"is_done":         isDone,
+		"is_reject":       isReject,
 		"survey_required": surveyRequired,
 	}).Error
 }
 
-func (repo *TicketRepository) GetSurveyScores(ticketIDs []string) (map[string]float64, error) {
-	scores := make(map[string]float64)
+func (repo *TicketRepository) GetSurveyScores(ticketIDs []int) (map[int]float64, error) {
+	scores := make(map[int]float64)
 	if len(ticketIDs) == 0 {
 		return scores, nil
 	}
 	type row struct {
-		TicketID string
+		TicketID int
 		AvgScore float64
 	}
 	var rows []row
@@ -242,10 +232,15 @@ func (repo *TicketRepository) GetSurveyScores(ticketIDs []string) (map[string]fl
 	return scores, nil
 }
 
-func nullableTrimmed(value string) any {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return nil
+func ticketStatusFlags(status domain.TicketStatus) (bool, bool, bool) {
+	switch status {
+	case domain.StatusAssign:
+		return true, false, false
+	case domain.StatusDone:
+		return true, true, false
+	case domain.StatusReject:
+		return false, false, true
+	default:
+		return false, false, false
 	}
-	return trimmed
 }
