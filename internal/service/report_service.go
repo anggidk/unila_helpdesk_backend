@@ -265,6 +265,65 @@ func (service *ReportService) ServiceSatisfactionSummary(period string, periods 
 	return result, nil
 }
 
+func (service *ReportService) SatisfactionOverview(period string) (domain.SatisfactionOverviewDTO, error) {
+	start, end := rollingReportRange(period, service.now)
+	return service.buildSatisfactionOverview(normalizePeriod(period), start, end)
+}
+
+func (service *ReportService) buildSatisfactionOverview(
+	period string,
+	start time.Time,
+	end time.Time,
+) (domain.SatisfactionOverviewDTO, error) {
+	categoryRows, err := service.reports.ListServiceSatisfactionRows(start, end)
+	if err != nil {
+		return domain.SatisfactionOverviewDTO{}, err
+	}
+	entityRows, err := service.reports.ListEntitySatisfactionRows(start, end)
+	if err != nil {
+		return domain.SatisfactionOverviewDTO{}, err
+	}
+	entityCategoryRows, err := service.reports.ListRegisteredSurveyRowsByEntityCategory(start, end)
+	if err != nil {
+		return domain.SatisfactionOverviewDTO{}, err
+	}
+
+	categories := service.categoryNameMap()
+	categoryItems := make([]domain.SatisfactionOverviewItemDTO, 0, len(categoryRows))
+	for _, row := range categoryRows {
+		label := categories[row.CategoryID]
+		if label == "" {
+			label = row.CategoryID
+		}
+		categoryItems = append(categoryItems, domain.SatisfactionOverviewItemDTO{
+			Label:     label,
+			AvgScore:  scoreToFivePoint(row.AvgScore),
+			Responses: row.Responses,
+		})
+	}
+
+	entityItems := make([]domain.SatisfactionOverviewItemDTO, 0, len(entityRows))
+	for _, row := range entityRows {
+		entityItems = append(entityItems, domain.SatisfactionOverviewItemDTO{
+			Label:     strings.TrimSpace(row.Label),
+			AvgScore:  scoreToFivePoint(row.AvgScore),
+			Responses: row.Responses,
+		})
+	}
+	entityPreferences := buildEntityPreferenceOverview(entityCategoryRows, categories)
+
+	return domain.SatisfactionOverviewDTO{
+		Period:            normalizePeriod(period),
+		Start:             start,
+		End:               end,
+		CategoryHighest:   pickSatisfactionOverviewItem(categoryItems, true),
+		CategoryLowest:    pickSatisfactionOverviewItem(categoryItems, false),
+		EntityHighest:     pickSatisfactionOverviewItem(entityItems, true),
+		EntityLowest:      pickSatisfactionOverviewItem(entityItems, false),
+		EntityPreferences: entityPreferences,
+	}, nil
+}
+
 func (service *ReportService) SurveySatisfaction(
 	categoryID string,
 	templateID string,
@@ -671,6 +730,110 @@ func (service *ReportService) resolveCategoryName(categoryID string) string {
 		return category.Name
 	}
 	return categoryID
+}
+
+func pickSatisfactionOverviewItem(
+	items []domain.SatisfactionOverviewItemDTO,
+	pickMax bool,
+) *domain.SatisfactionOverviewItemDTO {
+	if len(items) == 0 {
+		return nil
+	}
+
+	selected := items[0]
+	for _, item := range items[1:] {
+		if isBetterSatisfactionOverviewItem(item, selected, pickMax) {
+			selected = item
+		}
+	}
+	return &selected
+}
+
+func isBetterSatisfactionOverviewItem(
+	candidate domain.SatisfactionOverviewItemDTO,
+	current domain.SatisfactionOverviewItemDTO,
+	pickMax bool,
+) bool {
+	if pickMax {
+		if candidate.AvgScore != current.AvgScore {
+			return candidate.AvgScore > current.AvgScore
+		}
+	} else if candidate.AvgScore != current.AvgScore {
+		return candidate.AvgScore < current.AvgScore
+	}
+
+	if candidate.Responses != current.Responses {
+		return candidate.Responses > current.Responses
+	}
+
+	return candidate.Label < current.Label
+}
+
+func buildEntityPreferenceOverview(
+	rows []repository.EntityCategoryTotalRow,
+	categories map[string]string,
+) []domain.SatisfactionEntityPreferenceDTO {
+	orderedEntities := []string{
+		domain.EntityMahasiswa,
+		domain.EntityDosen,
+		domain.EntityTendik,
+		domain.EntityLainnya,
+	}
+	totalByEntity := make(map[string]int)
+	bestByEntity := make(map[string]repository.EntityCategoryTotalRow)
+
+	for _, row := range rows {
+		entity := strings.TrimSpace(row.Entity)
+		if entity == "" {
+			entity = domain.EntityLainnya
+		}
+		totalByEntity[entity] += row.Total
+
+		best, ok := bestByEntity[entity]
+		if !ok || row.Total > best.Total {
+			bestByEntity[entity] = row
+			continue
+		}
+		if row.Total == best.Total {
+			currentLabel := categories[row.CategoryID]
+			if currentLabel == "" {
+				currentLabel = row.CategoryID
+			}
+			bestLabel := categories[best.CategoryID]
+			if bestLabel == "" {
+				bestLabel = best.CategoryID
+			}
+			if currentLabel < bestLabel {
+				bestByEntity[entity] = row
+			}
+		}
+	}
+
+	result := make([]domain.SatisfactionEntityPreferenceDTO, 0, len(orderedEntities))
+	for _, entity := range orderedEntities {
+		total := totalByEntity[entity]
+		if total == 0 {
+			result = append(result, domain.SatisfactionEntityPreferenceDTO{
+				Entity: entity,
+			})
+			continue
+		}
+
+		best := bestByEntity[entity]
+		categoryLabel := categories[best.CategoryID]
+		if categoryLabel == "" {
+			categoryLabel = best.CategoryID
+		}
+		share := roundTo(float64(best.Total)/float64(total)*100, 1)
+		result = append(result, domain.SatisfactionEntityPreferenceDTO{
+			Entity:    entity,
+			Category:  categoryLabel,
+			Responses: best.Total,
+			Share:     share,
+		})
+	}
+
+	return result
 }
 
 func surveyResponseIDs(responses []domain.SurveyResponse) []string {

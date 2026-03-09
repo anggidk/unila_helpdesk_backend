@@ -27,6 +27,7 @@ func NewReportHandler(reports *service.ReportService) *ReportHandler {
 func (handler *ReportHandler) RegisterRoutes(admin *gin.RouterGroup) {
 	admin.GET("/reports/summary", handler.dashboardSummary)
 	admin.GET("/reports", handler.serviceTrends)
+	admin.GET("/reports/satisfaction-overview", handler.satisfactionOverview)
 	admin.GET("/reports/satisfaction-summary", handler.satisfactionSummary)
 	admin.GET("/reports/categories", handler.surveyCategories)
 	admin.GET("/reports/cohort", handler.cohortReport)
@@ -84,6 +85,16 @@ func (handler *ReportHandler) satisfactionSummary(c *gin.Context) {
 		return
 	}
 	respondOK(c, rows)
+}
+
+func (handler *ReportHandler) satisfactionOverview(c *gin.Context) {
+	period := c.DefaultQuery("period", "monthly")
+	report, err := handler.reports.SatisfactionOverview(period)
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondOK(c, report)
 }
 
 func (handler *ReportHandler) cohortReport(c *gin.Context) {

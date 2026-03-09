@@ -25,6 +25,12 @@ type ServiceSatisfactionRow struct {
 	Responses  int
 }
 
+type SatisfactionDimensionRow struct {
+	Label     string
+	AvgScore  float64
+	Responses int
+}
+
 type EntityCategoryTotalRow struct {
 	Entity     string
 	CategoryID string
@@ -156,6 +162,29 @@ func (repo *ReportRepository) ListServiceSatisfactionRows(start time.Time, end t
 		  AND sr.score > 0
 		GROUP BY t.id_service
 	`, start, end).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func (repo *ReportRepository) ListEntitySatisfactionRows(start time.Time, end time.Time) ([]SatisfactionDimensionRow, error) {
+	var rows []SatisfactionDimensionRow
+	if err := repo.db.Raw(`
+		SELECT grouped.label,
+		       COALESCE(AVG(grouped.score), 0) AS avg_score,
+		       COUNT(*) AS responses
+		FROM (
+			SELECT COALESCE(NULLIF(u.entity, ''), ?) AS label,
+			       sr.score AS score
+			FROM survey_responses sr
+			JOIN users u ON u.id = sr.number_id
+			WHERE sr.created_at >= ? AND sr.created_at < ?
+			  AND sr.score > 0
+			  AND u.role = ?
+		) AS grouped
+		GROUP BY grouped.label
+		ORDER BY grouped.label ASC
+	`, domain.EntityLainnya, start, end, domain.RoleRegistered).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	return rows, nil

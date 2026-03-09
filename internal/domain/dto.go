@@ -106,16 +106,17 @@ type CohortInsightDTO struct {
 }
 
 type CohortAnalysisDTO struct {
-	Period             string                 `json:"period"`
-	LookbackPeriods    int                    `json:"lookbackPeriods"`
-	BucketCount        int                    `json:"bucketCount"`
-	Start              time.Time              `json:"start"`
-	End                time.Time              `json:"end"`
-	BucketLabels       []string               `json:"bucketLabels"`
-	Overall            []CohortAnalysisRowDTO `json:"overall"`
-	ServiceComparisons []CohortAnalysisRowDTO `json:"serviceComparisons"`
-	EntityComparisons  []CohortAnalysisRowDTO `json:"entityComparisons"`
-	Insights           []CohortInsightDTO     `json:"insights"`
+	Period               string                   `json:"period"`
+	LookbackPeriods      int                      `json:"lookbackPeriods"`
+	BucketCount          int                      `json:"bucketCount"`
+	Start                time.Time                `json:"start"`
+	End                  time.Time                `json:"end"`
+	BucketLabels         []string                 `json:"bucketLabels"`
+	SatisfactionOverview *SatisfactionOverviewDTO `json:"satisfactionOverview"`
+	Overall              []CohortAnalysisRowDTO   `json:"overall"`
+	ServiceComparisons   []CohortAnalysisRowDTO   `json:"serviceComparisons"`
+	EntityComparisons    []CohortAnalysisRowDTO   `json:"entityComparisons"`
+	Insights             []CohortInsightDTO       `json:"insights"`
 }
 
 type CohortRowDTO struct {
@@ -144,6 +145,30 @@ type ServiceSatisfactionDTO struct {
 	AvgScore   float64 `json:"avgScore"`
 	Responses  int     `json:"responses"`
 	Percentage float64 `json:"percentage"`
+}
+
+type SatisfactionOverviewItemDTO struct {
+	Label     string  `json:"label"`
+	AvgScore  float64 `json:"avgScore"`
+	Responses int     `json:"responses"`
+}
+
+type SatisfactionEntityPreferenceDTO struct {
+	Entity    string  `json:"entity"`
+	Category  string  `json:"category"`
+	Responses int     `json:"responses"`
+	Share     float64 `json:"share"`
+}
+
+type SatisfactionOverviewDTO struct {
+	Period            string                            `json:"period"`
+	Start             time.Time                         `json:"start"`
+	End               time.Time                         `json:"end"`
+	CategoryHighest   *SatisfactionOverviewItemDTO      `json:"categoryHighest"`
+	CategoryLowest    *SatisfactionOverviewItemDTO      `json:"categoryLowest"`
+	EntityHighest     *SatisfactionOverviewItemDTO      `json:"entityHighest"`
+	EntityLowest      *SatisfactionOverviewItemDTO      `json:"entityLowest"`
+	EntityPreferences []SatisfactionEntityPreferenceDTO `json:"entityPreferences"`
 }
 
 type UsageCohortRowDTO struct {

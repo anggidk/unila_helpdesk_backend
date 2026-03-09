@@ -149,6 +149,11 @@ func (service *ReportService) CohortReport(
 		ServiceComparisons: cohortRowsFromAccumulators(serviceAccumulators, buckets, false),
 		EntityComparisons:  cohortRowsFromAccumulators(entityAccumulators, buckets, false),
 	}
+	satisfactionOverview, err := service.buildSatisfactionOverview(unit, start, end)
+	if err != nil {
+		return domain.CohortAnalysisDTO{}, err
+	}
+	report.SatisfactionOverview = &satisfactionOverview
 	report.Insights = buildCohortInsights(report)
 	return report, nil
 }
@@ -324,7 +329,7 @@ func bucketScoreDelta(buckets []domain.CohortBucketDTO) *float64 {
 }
 
 func buildCohortInsights(report domain.CohortAnalysisDTO) []domain.CohortInsightDTO {
-	insights := make([]domain.CohortInsightDTO, 0, 5)
+	insights := make([]domain.CohortInsightDTO, 0, 4)
 
 	if len(report.BucketLabels) > 1 {
 		if bestRows, value, ok := bestRetentionRows(report.Overall, 1, true); ok {
@@ -376,14 +381,6 @@ func buildCohortInsights(report domain.CohortAnalysisDTO) []domain.CohortInsight
 			Title:  "Entitas Paling Stabil",
 			Value:  fmt.Sprintf("%.1f poin", stability),
 			Detail: fmt.Sprintf("Entitas %s memiliki perubahan retensi rata-rata %.1f poin antar bucket.", entityRow.Label, stability),
-		})
-	}
-
-	if scoreRow := strongestScoreShiftRow(report.Overall); scoreRow != nil && scoreRow.ScoreDelta != nil {
-		insights = append(insights, domain.CohortInsightDTO{
-			Title:  "Perubahan Skor Paling Tajam",
-			Value:  formatSignedFloat(*scoreRow.ScoreDelta),
-			Detail: fmt.Sprintf("Cohort %s mengalami perubahan skor %s dari bucket pertama ke bucket terakhir yang teramati.", scoreRow.Label, formatSignedFloat(*scoreRow.ScoreDelta)),
 		})
 	}
 
