@@ -275,23 +275,39 @@ func (service *ReportService) buildSatisfactionOverview(
 	start time.Time,
 	end time.Time,
 ) (domain.SatisfactionOverviewDTO, error) {
-	categoryRows, err := service.reports.ListServiceSatisfactionRows(start, end)
+	return buildSatisfactionOverviewData(service.reports, service.categories, period, start, end)
+}
+
+func buildSatisfactionOverviewData(
+	reports *repository.ReportRepository,
+	categories *repository.CategoryRepository,
+	period string,
+	start time.Time,
+	end time.Time,
+) (domain.SatisfactionOverviewDTO, error) {
+	categoryRows, err := reports.ListServiceSatisfactionRows(start, end)
 	if err != nil {
 		return domain.SatisfactionOverviewDTO{}, err
 	}
-	entityRows, err := service.reports.ListEntitySatisfactionRows(start, end)
+	entityRows, err := reports.ListEntitySatisfactionRows(start, end)
 	if err != nil {
 		return domain.SatisfactionOverviewDTO{}, err
 	}
-	entityCategoryRows, err := service.reports.ListRegisteredSurveyRowsByEntityCategory(start, end)
+	entityCategoryRows, err := reports.ListRegisteredSurveyRowsByEntityCategory(start, end)
 	if err != nil {
 		return domain.SatisfactionOverviewDTO{}, err
 	}
 
-	categories := service.categoryNameMap()
+	categoryNames := make(map[string]string)
+	categoryRowsMeta, err := categories.List()
+	if err == nil {
+		for _, cat := range categoryRowsMeta {
+			categoryNames[strconv.Itoa(cat.ID)] = cat.Name
+		}
+	}
 	categoryItems := make([]domain.SatisfactionOverviewItemDTO, 0, len(categoryRows))
 	for _, row := range categoryRows {
-		label := categories[row.CategoryID]
+		label := categoryNames[row.CategoryID]
 		if label == "" {
 			label = row.CategoryID
 		}
@@ -310,7 +326,7 @@ func (service *ReportService) buildSatisfactionOverview(
 			Responses: row.Responses,
 		})
 	}
-	entityPreferences := buildEntityPreferenceOverview(entityCategoryRows, categories)
+	entityPreferences := buildEntityPreferenceOverview(entityCategoryRows, categoryNames)
 
 	return domain.SatisfactionOverviewDTO{
 		Period:            normalizePeriod(period),
@@ -548,106 +564,6 @@ func (service *ReportService) SurveyCategoriesWithResponses() ([]domain.ServiceC
 		})
 	}
 	return result, nil
-}
-
-func (service *ReportService) UsageCohort(period string, periods int) ([]domain.UsageCohortRowDTO, error) {
-	if periods <= 0 {
-		periods = 5
-	}
-	unit := normalizePeriod(period)
-	now := nowInWIB(service.now)
-	end := periodStart(now, unit)
-	start := addPeriods(end, unit, -(periods - 1))
-
-	rows := make([]domain.UsageCohortRowDTO, 0, periods)
-	for i := 0; i < periods; i++ {
-		windowStart := addPeriods(start, unit, i)
-		windowEnd := addPeriods(windowStart, unit, 1)
-
-		ticketCount, err := service.reports.CountTicketsInRange(windowStart, windowEnd)
-		if err != nil {
-			return nil, err
-		}
-
-		surveyCount, err := service.reports.CountSurveysInRange(windowStart, windowEnd)
-		if err != nil {
-			return nil, err
-		}
-
-		rows = append(rows, domain.UsageCohortRowDTO{
-			Label:   formatCohortLabel(windowStart, unit),
-			Tickets: int(ticketCount),
-			Surveys: int(surveyCount),
-		})
-	}
-	return rows, nil
-}
-
-func (service *ReportService) EntityServiceMatrix(period string, periods int) ([]domain.EntityServiceDTO, error) {
-	ticketCounts := make(map[string]map[string]int)
-	surveyCounts := make(map[string]map[string]int)
-
-	start, end := periodRange(period, periods, service.now)
-
-	ticketRows, err := service.reports.ListRegisteredTicketRowsByEntityCategory(start, end)
-	if err != nil {
-		return nil, err
-	}
-	for _, item := range ticketRows {
-		if ticketCounts[item.Entity] == nil {
-			ticketCounts[item.Entity] = make(map[string]int)
-		}
-		ticketCounts[item.Entity][item.CategoryID] = item.Total
-	}
-
-	surveyRows, err := service.reports.ListRegisteredSurveyRowsByEntityCategory(start, end)
-	if err != nil {
-		return nil, err
-	}
-	for _, item := range surveyRows {
-		if surveyCounts[item.Entity] == nil {
-			surveyCounts[item.Entity] = make(map[string]int)
-		}
-		surveyCounts[item.Entity][item.CategoryID] = item.Total
-	}
-
-	categories, err := service.listRegisteredCategories()
-	if err != nil {
-		return nil, err
-	}
-
-	entities := make(map[string]struct{})
-	for entity := range ticketCounts {
-		entities[entity] = struct{}{}
-	}
-	for entity := range surveyCounts {
-		entities[entity] = struct{}{}
-	}
-	entityRows, err := service.reports.ListRegisteredEntities()
-	if err != nil {
-		return nil, err
-	}
-	for _, entity := range entityRows {
-		entities[entity] = struct{}{}
-	}
-
-	rows := make([]domain.EntityServiceDTO, 0)
-	for entity := range entities {
-		for _, cat := range categories {
-			rows = append(rows, domain.EntityServiceDTO{
-				Entity:     entity,
-				CategoryID: strconv.Itoa(cat.ID),
-				Category:   cat.Name,
-				Tickets:    ticketCounts[entity][strconv.Itoa(cat.ID)],
-				Surveys:    surveyCounts[entity][strconv.Itoa(cat.ID)],
-			})
-		}
-	}
-	return rows, nil
-}
-
-func (service *ReportService) listRegisteredCategories() ([]domain.ServiceCategory, error) {
-	return service.reports.ListRegisteredCategories()
 }
 
 func periodRange(period string, periods int, nowFn func() time.Time) (time.Time, time.Time) {

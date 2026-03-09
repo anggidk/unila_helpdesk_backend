@@ -75,13 +75,14 @@ func main() {
 	surveyService := service.NewSurveyService(surveyRepo, ticketRepo)
 	notificationService := service.NewNotificationService(notificationRepo, tokenRepo)
 	reportService := service.NewReportService(reportRepo, categoryRepo, surveyRepo)
+	cohortService := service.NewCohortService(reportRepo, categoryRepo)
 
 	authHandler := handler.NewAuthHandler(authService)
 	categoryHandler := handler.NewCategoryHandler(categoryService)
 	ticketHandler := handler.NewTicketHandler(ticketService)
 	surveyHandler := handler.NewSurveyHandler(surveyService)
 	notificationHandler := handler.NewNotificationHandler(notificationService)
-	reportHandler := handler.NewReportHandler(reportService)
+	reportHandler := handler.NewReportHandler(reportService, cohortService)
 	uploadHandler := handler.NewUploadHandler(cfg.BaseURL)
 
 	router := gin.Default()

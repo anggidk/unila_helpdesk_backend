@@ -16,12 +16,16 @@ import (
 
 type ReportHandler struct {
 	reports *service.ReportService
+	cohorts *service.CohortService
 }
 
 var reportHandlerLocationWIB = time.FixedZone("WIB", 7*60*60)
 
-func NewReportHandler(reports *service.ReportService) *ReportHandler {
-	return &ReportHandler{reports: reports}
+func NewReportHandler(reports *service.ReportService, cohorts *service.CohortService) *ReportHandler {
+	return &ReportHandler{
+		reports: reports,
+		cohorts: cohorts,
+	}
 }
 
 func (handler *ReportHandler) RegisterRoutes(admin *gin.RouterGroup) {
@@ -99,7 +103,7 @@ func (handler *ReportHandler) satisfactionOverview(c *gin.Context) {
 
 func (handler *ReportHandler) cohortReport(c *gin.Context) {
 	period, lookback, buckets := parseCohortParams(c)
-	report, err := handler.reports.CohortReport(period, lookback, buckets)
+	report, err := handler.cohorts.CohortReport(period, lookback, buckets)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -199,7 +203,7 @@ func (handler *ReportHandler) surveyCategories(c *gin.Context) {
 
 func (handler *ReportHandler) usageCohort(c *gin.Context) {
 	period, periods := parsePeriodParams(c, 5)
-	rows, err := handler.reports.UsageCohort(period, periods)
+	rows, err := handler.cohorts.UsageCohort(period, periods)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -209,7 +213,7 @@ func (handler *ReportHandler) usageCohort(c *gin.Context) {
 
 func (handler *ReportHandler) entityService(c *gin.Context) {
 	period, periods := parsePeriodParams(c, 5)
-	rows, err := handler.reports.EntityServiceMatrix(period, periods)
+	rows, err := handler.cohorts.EntityServiceMatrix(period, periods)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, err.Error())
 		return
