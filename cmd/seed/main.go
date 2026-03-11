@@ -316,33 +316,19 @@ func main() {
 	}
 
 	seeds := []seedUser{
-		// ===== Admin (3) =====
-		{
-			Username: "admin1",
-			Password: "admin123",
-			Name:     "Admin 1",
-			Email:    "admin1@unila.ac.id",
-			Role:     domain.RoleAdmin,
-			Entity:   "Admin",
-		},
-		{
-			Username: "admin2",
-			Password: "admin123",
-			Name:     "Admin 2",
-			Email:    "admin2@unila.ac.id",
-			Role:     domain.RoleAdmin,
-			Entity:   "Admin",
-		},
-		{
-			Username: "admin3",
-			Password: "admin123",
-			Name:     "Admin 3",
-			Email:    "admin3@unila.ac.id",
-			Role:     domain.RoleAdmin,
-			Entity:   "Admin",
-		},
+		// ===== Admin (10) =====
+		{Username: "admin1", Password: "admin123", Name: "Admin 1", Email: "admin1@unila.ac.id", Role: domain.RoleAdmin, Entity: "Admin"},
+		{Username: "admin2", Password: "admin123", Name: "Admin 2", Email: "admin2@unila.ac.id", Role: domain.RoleAdmin, Entity: "Admin"},
+		{Username: "admin3", Password: "admin123", Name: "Admin 3", Email: "admin3@unila.ac.id", Role: domain.RoleAdmin, Entity: "Admin"},
+		{Username: "admin4", Password: "admin123", Name: "Admin 4", Email: "admin4@unila.ac.id", Role: domain.RoleAdmin, Entity: "Admin"},
+		{Username: "admin5", Password: "admin123", Name: "Admin 5", Email: "admin5@unila.ac.id", Role: domain.RoleAdmin, Entity: "Admin"},
+		{Username: "admin6", Password: "admin123", Name: "Admin 6", Email: "admin6@unila.ac.id", Role: domain.RoleAdmin, Entity: "Admin"},
+		{Username: "admin7", Password: "admin123", Name: "Admin 7", Email: "admin7@unila.ac.id", Role: domain.RoleAdmin, Entity: "Admin"},
+		{Username: "admin8", Password: "admin123", Name: "Admin 8", Email: "admin8@unila.ac.id", Role: domain.RoleAdmin, Entity: "Admin"},
+		{Username: "admin9", Password: "admin123", Name: "Admin 9", Email: "admin9@unila.ac.id", Role: domain.RoleAdmin, Entity: "Admin"},
+		{Username: "admin10", Password: "admin123", Name: "Admin 10", Email: "admin10@unila.ac.id", Role: domain.RoleAdmin, Entity: "Admin"},
 
-		// ===== Mahasiswa (35) =====
+		// ===== Mahasiswa (40) =====
 		{Username: "mahasiswa1", Password: "mahasiswa123", Name: "Mahasiswa 1", Email: "mahasiswa1@unila.ac.id", Role: domain.RoleRegistered, Entity: "Mahasiswa"},
 		{Username: "mahasiswa2", Password: "mahasiswa123", Name: "Mahasiswa 2", Email: "mahasiswa2@unila.ac.id", Role: domain.RoleRegistered, Entity: "Mahasiswa"},
 		{Username: "mahasiswa3", Password: "mahasiswa123", Name: "Mahasiswa 3", Email: "mahasiswa3@unila.ac.id", Role: domain.RoleRegistered, Entity: "Mahasiswa"},
@@ -378,8 +364,13 @@ func main() {
 		{Username: "mahasiswa33", Password: "mahasiswa123", Name: "Mahasiswa 33", Email: "mahasiswa33@unila.ac.id", Role: domain.RoleRegistered, Entity: "Mahasiswa"},
 		{Username: "mahasiswa34", Password: "mahasiswa123", Name: "Mahasiswa 34", Email: "mahasiswa34@unila.ac.id", Role: domain.RoleRegistered, Entity: "Mahasiswa"},
 		{Username: "mahasiswa35", Password: "mahasiswa123", Name: "Mahasiswa 35", Email: "mahasiswa35@unila.ac.id", Role: domain.RoleRegistered, Entity: "Mahasiswa"},
+		{Username: "mahasiswa36", Password: "mahasiswa123", Name: "Mahasiswa 36", Email: "mahasiswa36@unila.ac.id", Role: domain.RoleRegistered, Entity: "Mahasiswa"},
+		{Username: "mahasiswa37", Password: "mahasiswa123", Name: "Mahasiswa 37", Email: "mahasiswa37@unila.ac.id", Role: domain.RoleRegistered, Entity: "Mahasiswa"},
+		{Username: "mahasiswa38", Password: "mahasiswa123", Name: "Mahasiswa 38", Email: "mahasiswa38@unila.ac.id", Role: domain.RoleRegistered, Entity: "Mahasiswa"},
+		{Username: "mahasiswa39", Password: "mahasiswa123", Name: "Mahasiswa 39", Email: "mahasiswa39@unila.ac.id", Role: domain.RoleRegistered, Entity: "Mahasiswa"},
+		{Username: "mahasiswa40", Password: "mahasiswa123", Name: "Mahasiswa 40", Email: "mahasiswa40@unila.ac.id", Role: domain.RoleRegistered, Entity: "Mahasiswa"},
 
-		// ===== Dosen (7) =====
+		// ===== Dosen (10) =====
 		{Username: "dosen1", Password: "dosen123", Name: "Dosen 1", Email: "dosen1@unila.ac.id", Role: domain.RoleRegistered, Entity: "Dosen"},
 		{Username: "dosen2", Password: "dosen123", Name: "Dosen 2", Email: "dosen2@unila.ac.id", Role: domain.RoleRegistered, Entity: "Dosen"},
 		{Username: "dosen3", Password: "dosen123", Name: "Dosen 3", Email: "dosen3@unila.ac.id", Role: domain.RoleRegistered, Entity: "Dosen"},
@@ -387,13 +378,21 @@ func main() {
 		{Username: "dosen5", Password: "dosen123", Name: "Dosen 5", Email: "dosen5@unila.ac.id", Role: domain.RoleRegistered, Entity: "Dosen"},
 		{Username: "dosen6", Password: "dosen123", Name: "Dosen 6", Email: "dosen6@unila.ac.id", Role: domain.RoleRegistered, Entity: "Dosen"},
 		{Username: "dosen7", Password: "dosen123", Name: "Dosen 7", Email: "dosen7@unila.ac.id", Role: domain.RoleRegistered, Entity: "Dosen"},
+		{Username: "dosen8", Password: "dosen123", Name: "Dosen 8", Email: "dosen8@unila.ac.id", Role: domain.RoleRegistered, Entity: "Dosen"},
+		{Username: "dosen9", Password: "dosen123", Name: "Dosen 9", Email: "dosen9@unila.ac.id", Role: domain.RoleRegistered, Entity: "Dosen"},
+		{Username: "dosen10", Password: "dosen123", Name: "Dosen 10", Email: "dosen10@unila.ac.id", Role: domain.RoleRegistered, Entity: "Dosen"},
 
-		// ===== Tendik (5) =====
+		// ===== Tendik (10) =====
 		{Username: "tendik1", Password: "tendik123", Name: "Tendik 1", Email: "tendik1@unila.ac.id", Role: domain.RoleRegistered, Entity: "Tendik"},
 		{Username: "tendik2", Password: "tendik123", Name: "Tendik 2", Email: "tendik2@unila.ac.id", Role: domain.RoleRegistered, Entity: "Tendik"},
 		{Username: "tendik3", Password: "tendik123", Name: "Tendik 3", Email: "tendik3@unila.ac.id", Role: domain.RoleRegistered, Entity: "Tendik"},
 		{Username: "tendik4", Password: "tendik123", Name: "Tendik 4", Email: "tendik4@unila.ac.id", Role: domain.RoleRegistered, Entity: "Tendik"},
 		{Username: "tendik5", Password: "tendik123", Name: "Tendik 5", Email: "tendik5@unila.ac.id", Role: domain.RoleRegistered, Entity: "Tendik"},
+		{Username: "tendik6", Password: "tendik123", Name: "Tendik 6", Email: "tendik6@unila.ac.id", Role: domain.RoleRegistered, Entity: "Tendik"},
+		{Username: "tendik7", Password: "tendik123", Name: "Tendik 7", Email: "tendik7@unila.ac.id", Role: domain.RoleRegistered, Entity: "Tendik"},
+		{Username: "tendik8", Password: "tendik123", Name: "Tendik 8", Email: "tendik8@unila.ac.id", Role: domain.RoleRegistered, Entity: "Tendik"},
+		{Username: "tendik9", Password: "tendik123", Name: "Tendik 9", Email: "tendik9@unila.ac.id", Role: domain.RoleRegistered, Entity: "Tendik"},
+		{Username: "tendik10", Password: "tendik123", Name: "Tendik 10", Email: "tendik10@unila.ac.id", Role: domain.RoleRegistered, Entity: "Tendik"},
 	}
 
 	for _, seed := range seeds {
