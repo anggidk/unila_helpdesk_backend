@@ -80,7 +80,16 @@ func AutoMigrate(database *gorm.DB) error {
 		if err := tx.Exec(migration20260209Baseline).Error; err != nil {
 			return err
 		}
-		return tx.Exec(migration20260311LampToText).Error
+		if err := tx.Exec(migration20260311LampToText).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec(migration20260311FixGuestMarkerConstraint).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec(migration20260311DropUnusedUploadsTable).Error; err != nil {
+			return err
+		}
+		return tx.Exec(migration20260311SurveyTemplateIsActive).Error
 	})
 }
 
@@ -402,15 +411,6 @@ CREATE INDEX IF NOT EXISTS ix_category_templates_template_id ON public.category_
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_number_id ON public.refresh_tokens(number_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_refresh_tokens_token_hash ON public.refresh_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_expires_at ON public.refresh_tokens(expires_at);
-
-CREATE TABLE IF NOT EXISTS public.uploads (
-    id varchar(30) PRIMARY KEY,
-    original_name varchar(255) NOT NULL DEFAULT '',
-    content_type varchar(100) NOT NULL DEFAULT '',
-    data bytea NOT NULL,
-    size bigint NOT NULL DEFAULT 0,
-    created_at timestamptz
-);
 `
 
 // migration20260311LampToText mengubah kolom lamp1/lamp2 dari varchar(255) ke text
@@ -418,4 +418,30 @@ CREATE TABLE IF NOT EXISTS public.uploads (
 const migration20260311LampToText = `
 ALTER TABLE public.tickets ALTER COLUMN lamp1 TYPE text;
 ALTER TABLE public.tickets ALTER COLUMN lamp2 TYPE text;
+`
+
+// migration20260311FixGuestMarkerConstraint drop-and-recreates chk_tickets_guest_marker
+// karena versi lama yang tersimpan di DB (dari IF NOT EXISTS) mungkin lebih ketat
+// dari definisi yang diinginkan (memblokir guest ticket dengan status DONE).
+const migration20260311FixGuestMarkerConstraint = `
+ALTER TABLE public.tickets DROP CONSTRAINT IF EXISTS chk_tickets_guest_marker;
+ALTER TABLE public.tickets ADD CONSTRAINT chk_tickets_guest_marker
+    CHECK (
+        NULLIF(BTRIM(number_id), '') IS NOT NULL AND
+        (username IS NULL OR NULLIF(BTRIM(username), '') IS NOT NULL)
+    );
+`
+
+// migration20260311DropUnusedUploadsTable menghapus tabel uploads lama yang tidak lagi
+// dipakai karena endpoint upload saat ini menyimpan file ke filesystem, sedangkan
+// lampiran tiket dikirim sebagai base64 data URI pada kolom lamp1/lamp2.
+const migration20260311DropUnusedUploadsTable = `
+DROP TABLE IF EXISTS public.uploads;
+`
+
+// migration20260311SurveyTemplateIsActive menambahkan kolom is_active ke survey_templates.
+// Template yang memiliki respons tidak dihapus secara fisik melainkan dinonaktifkan
+// agar data historis tetap terjaga.
+const migration20260311SurveyTemplateIsActive = `
+ALTER TABLE public.survey_templates ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true;
 `

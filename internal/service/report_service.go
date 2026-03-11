@@ -352,6 +352,17 @@ func (service *ReportService) SurveySatisfaction(
 
 	template, err := service.resolveTemplate(categoryID, templateID, false)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			start, end := rollingReportRange(period, service.now)
+			return &domain.SurveySatisfactionDTO{
+				CategoryID: categoryID,
+				Category:   service.resolveCategoryName(categoryID),
+				Period:     normalizePeriod(period),
+				Start:      start,
+				End:        end,
+				Rows:       []domain.SurveySatisfactionRowDTO{},
+			}, nil
+		}
 		return nil, err
 	}
 
@@ -441,6 +452,18 @@ func (service *ReportService) SurveySatisfactionExport(
 
 	template, err := service.resolveTemplate(categoryID, templateID, true)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			start, end := rollingReportRange(period, service.now)
+			return &domain.SurveySatisfactionExportDTO{
+				CategoryID: categoryID,
+				Category:   service.resolveCategoryName(categoryID),
+				Period:     normalizePeriod(period),
+				Start:      start,
+				End:        end,
+				Questions:  []domain.SurveySatisfactionExportQuestionDTO{},
+				Responses:  []domain.SurveySatisfactionExportResponseDTO{},
+			}, nil
+		}
 		return nil, err
 	}
 

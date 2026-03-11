@@ -133,6 +133,7 @@ type SurveyTemplate struct {
 	Title       string           `gorm:"size:160"`
 	Description string           `gorm:"type:text"`
 	Framework   string           `gorm:"size:80"`
+	IsActive    bool             `gorm:"column:is_active;default:true"`
 	Questions   []SurveyQuestion `gorm:"foreignKey:TemplateID"`
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
@@ -191,14 +192,3 @@ type RefreshToken struct {
 	ExpiresAt time.Time `gorm:"index"`
 	CreatedAt time.Time
 }
-
-type UploadedFile struct {
-	ID           string `gorm:"primaryKey;size:30"`
-	OriginalName string `gorm:"size:255"`
-	ContentType  string `gorm:"size:100"`
-	Data         []byte `gorm:"type:bytea"`
-	Size         int64
-	CreatedAt    time.Time
-}
-
-func (UploadedFile) TableName() string { return "uploads" }

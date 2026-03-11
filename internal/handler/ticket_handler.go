@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -164,6 +165,7 @@ func (handler *TicketHandler) createGuestTicket(c *gin.Context) {
 	}
 	result, err := handler.tickets.CreateGuestTicket(c, req)
 	if err != nil {
+		log.Printf("[createGuestTicket] error: %v", err)
 		respondError(c, http.StatusBadRequest, err.Error())
 		return
 	}

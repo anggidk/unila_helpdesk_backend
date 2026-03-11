@@ -44,7 +44,7 @@ func NewSurveyRepository(db *gorm.DB) *SurveyRepository {
 
 func (repo *SurveyRepository) ListTemplates() ([]domain.SurveyTemplate, error) {
 	var templates []domain.SurveyTemplate
-	if err := repo.db.Preload("Questions").Order("created_at desc").Find(&templates).Error; err != nil {
+	if err := repo.db.Preload("Questions").Where("is_active = true").Order("created_at desc").Find(&templates).Error; err != nil {
 		return nil, err
 	}
 	return templates, nil
@@ -63,7 +63,7 @@ func (repo *SurveyRepository) FindByCategory(categoryID string) (*domain.SurveyT
 
 	var template domain.SurveyTemplate
 	if err := repo.db.Preload("Questions").
-		First(&template, "id = ?", mapping.TemplateID).Error; err != nil {
+		First(&template, "id = ? AND is_active = true", mapping.TemplateID).Error; err != nil {
 		return nil, err
 	}
 	return &template, nil
@@ -71,7 +71,7 @@ func (repo *SurveyRepository) FindByCategory(categoryID string) (*domain.SurveyT
 
 func (repo *SurveyRepository) FindByID(templateID string) (*domain.SurveyTemplate, error) {
 	var template domain.SurveyTemplate
-	if err := repo.db.Preload("Questions").First(&template, "id = ?", templateID).Error; err != nil {
+	if err := repo.db.Preload("Questions").First(&template, "id = ? AND is_active = true", templateID).Error; err != nil {
 		return nil, err
 	}
 	return &template, nil
@@ -119,7 +119,30 @@ func (repo *SurveyRepository) ReplaceTemplate(template *domain.SurveyTemplate) e
 
 func (repo *SurveyRepository) DeleteTemplate(templateID string) error {
 	return repo.db.Transaction(func(tx *gorm.DB) error {
+		// Check if any survey responses reference this template
+		var responseCount int64
+		if err := tx.Model(&domain.SurveyResponse{}).Where("template_id = ?", templateID).Count(&responseCount).Error; err != nil {
+			return err
+		}
+
+		if responseCount > 0 {
+			// Soft delete: mark inactive and unbind from category, preserve data integrity
+			result := tx.Model(&domain.SurveyTemplate{}).Where("id = ?", templateID).Update("is_active", false)
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				return gorm.ErrRecordNotFound
+			}
+			// Unbind from any category so it can't be used for new surveys
+			return tx.Where("template_id = ?", templateID).Delete(&domain.CategoryTemplate{}).Error
+		}
+
+		// Hard delete: no responses, safe to remove entirely
 		if err := tx.Where("template_id = ?", templateID).Delete(&domain.SurveyQuestion{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("template_id = ?", templateID).Delete(&domain.CategoryTemplate{}).Error; err != nil {
 			return err
 		}
 		result := tx.Delete(&domain.SurveyTemplate{}, "id = ?", templateID)
@@ -185,6 +208,8 @@ func (repo *SurveyRepository) ListResponses(
 	if strings.TrimSpace(filter.CategoryID) != "" {
 		if serviceID, err := strconv.Atoi(strings.TrimSpace(filter.CategoryID)); err == nil && serviceID > 0 {
 			base = base.Where("t.id_service = ?", serviceID)
+		} else {
+			base = base.Where("1 = 0")
 		}
 	}
 	if strings.TrimSpace(filter.TemplateID) != "" {

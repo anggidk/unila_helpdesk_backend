@@ -1,35 +1,29 @@
 package handler
 
 import (
+	"encoding/base64"
+	"fmt"
+	"io"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
-
-	"unila_helpdesk_backend/internal/util"
 
 	"github.com/gin-gonic/gin"
 )
 
 const maxUploadSize = 5 << 20 // 5MB
 
-type UploadHandler struct {
-	baseURL   string
-	uploadDir string
-}
+type UploadHandler struct{}
 
-func NewUploadHandler(baseURL string) *UploadHandler {
-	return &UploadHandler{
-		baseURL:   strings.TrimRight(baseURL, "/"),
-		uploadDir: "uploads",
-	}
+func NewUploadHandler(_ string) *UploadHandler {
+	return &UploadHandler{}
 }
 
 func (handler *UploadHandler) RegisterRoutes(public *gin.RouterGroup) {
 	public.POST("/uploads", handler.upload)
-	public.GET("/uploads/:name", handler.download)
 }
 
+// upload membaca file dari multipart form, mengenkode sebagai base64 data URI,
+// dan mengembalikan data URI langsung — tidak ada yang disimpan ke filesystem.
+// Klien menyimpan nilai "url" ini (data URI) ke kolom lamp1/lamp2 tiket.
 func (handler *UploadHandler) upload(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -40,41 +34,27 @@ func (handler *UploadHandler) upload(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "ukuran file maksimal 5MB")
 		return
 	}
-	if err := os.MkdirAll(handler.uploadDir, 0o755); err != nil {
-		respondError(c, http.StatusInternalServerError, "gagal menyiapkan direktori upload")
+
+	src, err := file.Open()
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, "gagal membuka file")
+		return
+	}
+	defer src.Close()
+
+	data, err := io.ReadAll(src)
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, "gagal membaca file")
 		return
 	}
 
-	extension := strings.ToLower(filepath.Ext(file.Filename))
-	storedName := util.NewID(24) + extension
-	targetPath := filepath.Join(handler.uploadDir, storedName)
-	if err := c.SaveUploadedFile(file, targetPath); err != nil {
-		respondError(c, http.StatusInternalServerError, "gagal menyimpan file")
-		return
-	}
+	// DetectContentType inspects the first 512 bytes
+	mimeType := http.DetectContentType(data)
+	dataURI := fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(data))
 
 	respondOK(c, gin.H{
-		"id":   storedName,
-		"path": storedName,
-		"url":  handler.baseURL + "/uploads/" + storedName,
+		"url":  dataURI,
 		"name": file.Filename,
 		"size": file.Size,
 	})
-}
-
-func (handler *UploadHandler) download(c *gin.Context) {
-	filename := filepath.Base(strings.TrimSpace(c.Param("name")))
-	if filename == "" || filename == "." {
-		respondError(c, http.StatusBadRequest, "nama file wajib diisi")
-		return
-	}
-
-	targetPath := filepath.Join(handler.uploadDir, filename)
-	info, err := os.Stat(targetPath)
-	if err != nil || info.IsDir() {
-		respondError(c, http.StatusNotFound, "file tidak ditemukan")
-		return
-	}
-
-	c.File(targetPath)
 }

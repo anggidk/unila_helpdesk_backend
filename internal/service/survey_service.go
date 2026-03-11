@@ -79,6 +79,9 @@ func (service *SurveyService) CreateTemplate(req SurveyTemplateRequest) (domain.
 	}
 
 	template.Questions = buildSurveyQuestions(req.Questions, template.ID, service.now())
+	if len(template.Questions) == 0 {
+		return domain.SurveyTemplateDTO{}, errors.New("template wajib memiliki minimal satu pertanyaan")
+	}
 	if err := service.surveys.CreateTemplate(&template); err != nil {
 		return domain.SurveyTemplateDTO{}, err
 	}
@@ -190,6 +193,9 @@ func (service *SurveyService) SubmitSurvey(user domain.User, req SurveyResponseR
 	items, err := buildSurveyResponseItems(responseID, req.Answers, template, createdAt)
 	if err != nil {
 		return err
+	}
+	if len(template.Questions) > 0 && len(items) == 0 {
+		return errors.New("jawaban wajib diisi")
 	}
 
 	response := domain.SurveyResponse{
