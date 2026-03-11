@@ -149,7 +149,7 @@ func seedSurveyTemplates() []seedSurveyTemplate {
 				{ID: "internet_q6", Text: "Kecepatan akses internet setelah perbaikan sesuai dengan kebutuhan saya.", Type: domain.QuestionLikert4, Options: likert4Options},
 				{ID: "internet_q7", Text: "Solusi yang diberikan sesuai dengan masalah jaringan yang saya alami.", Type: domain.QuestionLikert4, Options: likert4Options},
 				{ID: "internet_q8", Text: "Secara keseluruhan, saya puas terhadap layanan penanganan jaringan internet.", Type: domain.QuestionLikert4, Options: likert4Options},
-				{ID: "internet_q9", Text: "Saran atau masukan Anda untuk peningkatan layanan jaringan internet.", Type: domain.QuestionText, Options: []string{}},
+				{ID: "internet_q9", Text: "Saran atau masukan Anda untuk peningkatan layanan jaringan internet (opsional).", Type: domain.QuestionText, Options: []string{}},
 			},
 		},
 		{
@@ -167,7 +167,7 @@ func seedSurveyTemplates() []seedSurveyTemplate {
 				{ID: "webdown_q6", Text: "Waktu penanganan gangguan website sesuai dengan harapan saya.", Type: domain.QuestionLikert4, Options: likert4Options},
 				{ID: "webdown_q7", Text: "Solusi yang diberikan sesuai dengan masalah website yang terjadi.", Type: domain.QuestionLikert4, Options: likert4Options},
 				{ID: "webdown_q8", Text: "Secara keseluruhan, saya puas terhadap layanan penanganan website down.", Type: domain.QuestionLikert4, Options: likert4Options},
-				{ID: "webdown_q9", Text: "Saran atau masukan Anda untuk peningkatan layanan penanganan website.", Type: domain.QuestionText, Options: []string{}},
+				{ID: "webdown_q9", Text: "Saran atau masukan Anda untuk peningkatan layanan penanganan website (opsional).", Type: domain.QuestionText, Options: []string{}},
 			},
 		},
 		{
@@ -185,7 +185,7 @@ func seedSurveyTemplates() []seedSurveyTemplate {
 				{ID: "sysinfo_q6", Text: "Solusi yang diberikan membantu saya menyelesaikan kendala pada sistem.", Type: domain.QuestionLikert4, Options: likert4Options},
 				{ID: "sysinfo_q7", Text: "Penanganan yang dilakukan sesuai dengan kebutuhan saya.", Type: domain.QuestionLikert4, Options: likert4Options},
 				{ID: "sysinfo_q8", Text: "Secara keseluruhan, saya puas terhadap layanan sistem informasi.", Type: domain.QuestionLikert4, Options: likert4Options},
-				{ID: "sysinfo_q9", Text: "Saran atau masukan Anda untuk peningkatan layanan sistem informasi.", Type: domain.QuestionText, Options: []string{}},
+				{ID: "sysinfo_q9", Text: "Saran atau masukan Anda untuk peningkatan layanan sistem informasi (opsional).", Type: domain.QuestionText, Options: []string{}},
 			},
 		},
 		{
@@ -203,7 +203,7 @@ func seedSurveyTemplates() []seedSurveyTemplate {
 				{ID: "siakadu_q6", Text: "Penanganan yang dilakukan membantu saya melanjutkan aktivitas akademik.", Type: domain.QuestionLikert4, Options: likert4Options},
 				{ID: "siakadu_q7", Text: "Solusi yang diberikan sesuai dengan kendala SIAKADU yang saya laporkan.", Type: domain.QuestionLikert4, Options: likert4Options},
 				{ID: "siakadu_q8", Text: "Secara keseluruhan, saya puas terhadap layanan penanganan SIAKADU.", Type: domain.QuestionLikert4, Options: likert4Options},
-				{ID: "siakadu_q9", Text: "Saran atau masukan Anda untuk peningkatan layanan SIAKADU.", Type: domain.QuestionText, Options: []string{}},
+				{ID: "siakadu_q9", Text: "Saran atau masukan Anda untuk peningkatan layanan SIAKADU (opsional).", Type: domain.QuestionText, Options: []string{}},
 			},
 		},
 		{
@@ -221,7 +221,7 @@ func seedSurveyTemplates() []seedSurveyTemplate {
 				{ID: "lainnya_q6", Text: "Permasalahan saya berhasil ditangani dengan baik.", Type: domain.QuestionLikert4, Options: likert4Options},
 				{ID: "lainnya_q7", Text: "Waktu penyelesaian layanan sesuai dengan harapan saya.", Type: domain.QuestionLikert4, Options: likert4Options},
 				{ID: "lainnya_q8", Text: "Secara keseluruhan, saya puas terhadap layanan yang saya terima.", Type: domain.QuestionLikert4, Options: likert4Options},
-				{ID: "lainnya_q9", Text: "Saran atau masukan Anda untuk peningkatan layanan pada kategori ini.", Type: domain.QuestionText, Options: []string{}},
+				{ID: "lainnya_q9", Text: "Saran atau masukan Anda untuk peningkatan layanan pada kategori ini (opsional).", Type: domain.QuestionText, Options: []string{}},
 			},
 		},
 	}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"net/url"
 	"strings"
 
 	firebase "firebase.google.com/go/v4"
@@ -16,28 +17,33 @@ import (
 type Client struct {
 	enabled bool
 	sender  *messaging.Client
+	webApp  string
 }
 
-func NewClient(enabled bool, credentialsPath string) *Client {
+func NewClient(enabled bool, credentialsPath string, webAppURL string) *Client {
 	if !enabled {
-		return &Client{enabled: false}
+		return &Client{enabled: false, webApp: normalizeWebAppURL(webAppURL)}
 	}
 	credentialsOption, err := resolveCredentialOption(credentialsPath)
 	if err != nil {
 		log.Printf("FCM disabled: invalid credentials format: %v", err)
-		return &Client{enabled: false}
+		return &Client{enabled: false, webApp: normalizeWebAppURL(webAppURL)}
 	}
 	app, err := firebase.NewApp(context.Background(), nil, credentialsOption)
 	if err != nil {
 		log.Printf("FCM disabled: failed to init app: %v", err)
-		return &Client{enabled: false}
+		return &Client{enabled: false, webApp: normalizeWebAppURL(webAppURL)}
 	}
 	sender, err := app.Messaging(context.Background())
 	if err != nil {
 		log.Printf("FCM disabled: failed to init messaging: %v", err)
-		return &Client{enabled: false}
+		return &Client{enabled: false, webApp: normalizeWebAppURL(webAppURL)}
 	}
-	return &Client{enabled: true, sender: sender}
+	return &Client{
+		enabled: true,
+		sender:  sender,
+		webApp:  normalizeWebAppURL(webAppURL),
+	}
 }
 
 func resolveCredentialOption(raw string) (option.ClientOption, error) {
@@ -80,6 +86,16 @@ func (client *Client) SendToTokens(
 		if strings.TrimSpace(token) == "" {
 			continue
 		}
+		webpush := &messaging.WebpushConfig{
+			Headers: map[string]string{
+				"Urgency": "high",
+			},
+		}
+		if link := client.webNotificationLink(data); link != "" {
+			webpush.FCMOptions = &messaging.WebpushFCMOptions{
+				Link: link,
+			}
+		}
 		message := &messaging.Message{
 			Token: token,
 			Notification: &messaging.Notification{
@@ -101,11 +117,7 @@ func (client *Client) SendToTokens(
 					"apns-push-type": "alert",
 				},
 			},
-			Webpush: &messaging.WebpushConfig{
-				Headers: map[string]string{
-					"Urgency": "high",
-				},
-			},
+			Webpush: webpush,
 		}
 		if _, err := client.sender.Send(ctx, message); err != nil {
 			tokenHint := token
@@ -128,6 +140,33 @@ func (client *Client) SendToTokens(
 
 	log.Printf("fcm sent: success=%d invalid=%d failure=%d", successCount, invalidCount, failureCount)
 	return invalidTokens, lastErr
+}
+
+func (client *Client) webNotificationLink(data map[string]string) string {
+	if client.webApp == "" {
+		return ""
+	}
+
+	target, err := url.Parse(client.webApp)
+	if err != nil {
+		return ""
+	}
+
+	target.Path = "/"
+	target.RawQuery = ""
+	target.Fragment = "/notifications"
+	if ticketID := strings.TrimSpace(data["ticket_id"]); ticketID != "" {
+		target.Fragment += "?ticketId=" + url.QueryEscape(ticketID)
+	}
+	return target.String()
+}
+
+func normalizeWebAppURL(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	return strings.TrimRight(trimmed, "/")
 }
 
 func isInvalidTokenError(err error) bool {

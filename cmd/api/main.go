@@ -63,7 +63,7 @@ func main() {
 
 	authService := service.NewAuthService(cfg, userRepo, refreshTokenRepo)
 	categoryService := service.NewCategoryService(categoryRepo)
-	fcmClient := fcm.NewClient(cfg.FCMEnabled, cfg.FCMCredentials)
+	fcmClient := fcm.NewClient(cfg.FCMEnabled, cfg.FCMCredentials, cfg.WebAppURL)
 	ticketService := service.NewTicketService(
 		ticketRepo,
 		categoryRepo,

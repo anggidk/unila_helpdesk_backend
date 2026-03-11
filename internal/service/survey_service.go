@@ -328,6 +328,9 @@ func buildSurveyResponseItems(
 		if !ok {
 			continue
 		}
+		if shouldSkipSurveyAnswer(question, value) {
+			continue
+		}
 		payload, err := json.Marshal(value)
 		if err != nil {
 			return nil, err
@@ -347,4 +350,17 @@ func buildSurveyResponseItems(
 		items = append(items, item)
 	}
 	return items, nil
+}
+
+func shouldSkipSurveyAnswer(question domain.SurveyQuestion, value interface{}) bool {
+	if question.Type != domain.QuestionText {
+		return false
+	}
+
+	text, ok := value.(string)
+	if !ok {
+		return false
+	}
+
+	return strings.TrimSpace(text) == ""
 }

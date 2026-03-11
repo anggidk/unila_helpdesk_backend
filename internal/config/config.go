@@ -13,6 +13,7 @@ type Config struct {
 	Environment           string
 	HTTPPort              string
 	BaseURL               string
+	WebAppURL             string
 	TicketInitialStatus   string
 	JWTSecret             string
 	JWTExpiry             time.Duration
@@ -48,6 +49,10 @@ func Load() (Config, error) {
 	baseURL, err := envRequiredString("BASE_URL")
 	if err != nil {
 		return Config{}, err
+	}
+	webAppURL := envOptionalString("WEB_APP_URL")
+	if webAppURL == "" {
+		webAppURL = firstConcreteOrigin(strings.Split(os.Getenv("CORS_ORIGINS"), ","))
 	}
 	ticketInitialStatus, err := envRequiredString("TICKET_INITIAL_STATUS")
 	if err != nil {
@@ -115,6 +120,7 @@ func Load() (Config, error) {
 		Environment:           environment,
 		HTTPPort:              httpPort,
 		BaseURL:               baseURL,
+		WebAppURL:             webAppURL,
 		TicketInitialStatus:   ticketInitialStatus,
 		JWTSecret:             jwtSecret,
 		JWTExpiry:             jwtExpiry,
@@ -138,6 +144,10 @@ func envRequiredString(key string) (string, error) {
 		return "", fmt.Errorf("%s is required", key)
 	}
 	return value, nil
+}
+
+func envOptionalString(key string) string {
+	return strings.TrimSpace(os.Getenv(key))
 }
 
 func envRequiredBool(key string) (bool, error) {
@@ -180,4 +190,15 @@ func envRequiredDuration(key string) (time.Duration, error) {
 		return 0, fmt.Errorf("%s must be a valid duration", key)
 	}
 	return parsed, nil
+}
+
+func firstConcreteOrigin(origins []string) string {
+	for _, origin := range origins {
+		value := strings.TrimSpace(origin)
+		if value == "" || value == "*" {
+			continue
+		}
+		return value
+	}
+	return ""
 }
