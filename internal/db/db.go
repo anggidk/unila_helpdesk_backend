@@ -77,7 +77,10 @@ func quoteIdentifier(value string) string {
 
 func AutoMigrate(database *gorm.DB) error {
 	return database.Transaction(func(tx *gorm.DB) error {
-		return tx.Exec(migration20260209Baseline).Error
+		if err := tx.Exec(migration20260209Baseline).Error; err != nil {
+			return err
+		}
+		return tx.Exec(migration20260311LampToText).Error
 	})
 }
 
@@ -399,4 +402,20 @@ CREATE INDEX IF NOT EXISTS ix_category_templates_template_id ON public.category_
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_number_id ON public.refresh_tokens(number_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_refresh_tokens_token_hash ON public.refresh_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_expires_at ON public.refresh_tokens(expires_at);
+
+CREATE TABLE IF NOT EXISTS public.uploads (
+    id varchar(30) PRIMARY KEY,
+    original_name varchar(255) NOT NULL DEFAULT '',
+    content_type varchar(100) NOT NULL DEFAULT '',
+    data bytea NOT NULL,
+    size bigint NOT NULL DEFAULT 0,
+    created_at timestamptz
+);
+`
+
+// migration20260311LampToText mengubah kolom lamp1/lamp2 dari varchar(255) ke text
+// agar bisa menyimpan base64 file yang dikirim langsung dari frontend.
+const migration20260311LampToText = `
+ALTER TABLE public.tickets ALTER COLUMN lamp1 TYPE text;
+ALTER TABLE public.tickets ALTER COLUMN lamp2 TYPE text;
 `

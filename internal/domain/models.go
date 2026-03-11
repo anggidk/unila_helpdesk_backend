@@ -42,14 +42,14 @@ const (
 )
 
 const (
-	ServiceGuestPassword         = 1
-	ServiceGuestRegistration     = 2
-	ServiceGuestEmail            = 3
-	ServiceInternet              = 4
-	ServiceWebsiteDown           = 5
-	ServiceSistemInformasi       = 6
-	ServiceSIAKADU               = 7
-	ServiceLainnya               = 99
+	ServiceGuestPassword     = 1
+	ServiceGuestRegistration = 2
+	ServiceGuestEmail        = 3
+	ServiceInternet          = 4
+	ServiceWebsiteDown       = 5
+	ServiceSistemInformasi   = 6
+	ServiceSIAKADU           = 7
+	ServiceLainnya           = 99
 )
 
 const (
@@ -120,8 +120,8 @@ type Ticket struct {
 	IsDone         bool           `gorm:"column:is_done;default:false"`
 	StaffID        *string        `gorm:"column:id_staff;size:25"`
 	Status         TicketStatus   `gorm:"size:50"`
-	Lamp1          string         `gorm:"size:255"`
-	Lamp2          string         `gorm:"size:255"`
+	Lamp1          string         `gorm:"type:text"`
+	Lamp2          string         `gorm:"type:text"`
 	SurveyRequired bool           `gorm:"default:false"`
 	CreatedAt      time.Time      `gorm:"column:ticket_date"`
 
@@ -191,3 +191,14 @@ type RefreshToken struct {
 	ExpiresAt time.Time `gorm:"index"`
 	CreatedAt time.Time
 }
+
+type UploadedFile struct {
+	ID           string `gorm:"primaryKey;size:30"`
+	OriginalName string `gorm:"size:255"`
+	ContentType  string `gorm:"size:100"`
+	Data         []byte `gorm:"type:bytea"`
+	Size         int64
+	CreatedAt    time.Time
+}
+
+func (UploadedFile) TableName() string { return "uploads" }
