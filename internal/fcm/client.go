@@ -86,26 +86,36 @@ func (client *Client) SendToTokens(
 		if strings.TrimSpace(token) == "" {
 			continue
 		}
+		webpushData := copyStringMap(data)
+		if webpushData == nil {
+			webpushData = make(map[string]string)
+		}
+		if _, ok := webpushData["title"]; !ok && strings.TrimSpace(title) != "" {
+			webpushData["title"] = title
+		}
+		if _, ok := webpushData["body"]; !ok && strings.TrimSpace(body) != "" {
+			webpushData["body"] = body
+		}
 		webpush := &messaging.WebpushConfig{
 			Headers: map[string]string{
 				"Urgency": "high",
 			},
+			Data: webpushData,
 		}
-		if link := client.webNotificationLink(data); link != "" {
+		if link := client.webNotificationLink(webpushData); link != "" {
 			webpush.FCMOptions = &messaging.WebpushFCMOptions{
 				Link: link,
 			}
+			webpush.Data["link"] = link
 		}
 		message := &messaging.Message{
 			Token: token,
-			Notification: &messaging.Notification{
-				Title: title,
-				Body:  body,
-			},
-			Data: data,
+			Data:  copyStringMap(data),
 			Android: &messaging.AndroidConfig{
 				Priority: "high",
 				Notification: &messaging.AndroidNotification{
+					Title:        title,
+					Body:         body,
 					ChannelID:    "helpdesk_updates",
 					Priority:     messaging.PriorityMax,
 					DefaultSound: true,
@@ -115,6 +125,16 @@ func (client *Client) SendToTokens(
 				Headers: map[string]string{
 					"apns-priority":  "10",
 					"apns-push-type": "alert",
+				},
+				Payload: &messaging.APNSPayload{
+					Aps: &messaging.Aps{
+						Alert: &messaging.ApsAlert{
+							Title: title,
+							Body:  body,
+						},
+						Sound: "default",
+					},
+					CustomData: copyInterfaceMap(data),
 				},
 			},
 			Webpush: webpush,
@@ -167,6 +187,28 @@ func normalizeWebAppURL(raw string) string {
 		return ""
 	}
 	return strings.TrimRight(trimmed, "/")
+}
+
+func copyStringMap(input map[string]string) map[string]string {
+	if len(input) == 0 {
+		return nil
+	}
+	result := make(map[string]string, len(input))
+	for key, value := range input {
+		result[key] = value
+	}
+	return result
+}
+
+func copyInterfaceMap(input map[string]string) map[string]interface{} {
+	if len(input) == 0 {
+		return nil
+	}
+	result := make(map[string]interface{}, len(input))
+	for key, value := range input {
+		result[key] = value
+	}
+	return result
 }
 
 func isInvalidTokenError(err error) bool {
