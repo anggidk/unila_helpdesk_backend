@@ -1,38 +1,63 @@
 package service
 
 import (
+	"errors"
 	"testing"
-	"time"
 
-	"unila_helpdesk_backend/internal/config"
 	"unila_helpdesk_backend/internal/domain"
 )
 
-func TestAccessTokenExpiryForWebIsOneHour(t *testing.T) {
-	service := &AuthService{
-		cfg: config.Config{
-			JWTExpiry:      24 * time.Hour,
-			JWTExpiryUser:  24 * time.Hour,
-			JWTExpiryAdmin: 24 * time.Hour,
+func TestEnsureAdminAllowed(t *testing.T) {
+	tests := []struct {
+		name       string
+		user       domain.User
+		clientType string
+		wantErr    bool
+	}{
+		{
+			name:       "non admin is always allowed",
+			user:       domain.User{Role: domain.RoleRegistered},
+			clientType: "mobile",
+			wantErr:    false,
+		},
+		{
+			name:       "admin web is allowed",
+			user:       domain.User{Role: domain.RoleAdmin},
+			clientType: "web",
+			wantErr:    false,
+		},
+		{
+			name:       "admin web with mixed case and whitespace is allowed",
+			user:       domain.User{Role: domain.RoleAdmin},
+			clientType: " Web ",
+			wantErr:    false,
+		},
+		{
+			name:       "admin mobile is rejected",
+			user:       domain.User{Role: domain.RoleAdmin},
+			clientType: "mobile",
+			wantErr:    true,
+		},
+		{
+			name:       "admin empty client type is rejected",
+			user:       domain.User{Role: domain.RoleAdmin},
+			clientType: "",
+			wantErr:    true,
 		},
 	}
 
-	got := service.accessTokenExpiry(domain.User{Role: domain.RoleRegistered}, "web")
-	if got != time.Hour {
-		t.Fatalf("expected 1h for web client, got %s", got)
-	}
-
-	got = service.accessTokenExpiry(domain.User{Role: domain.RoleAdmin}, "web")
-	if got != time.Hour {
-		t.Fatalf("expected 1h for web admin client, got %s", got)
-	}
-}
-
-func TestRefreshTokenPolicyDiffersByClientType(t *testing.T) {
-	if shouldIssueRefreshToken("web") {
-		t.Fatal("web client should not receive refresh token")
-	}
-	if !shouldIssueRefreshToken("mobile") {
-		t.Fatal("mobile client should receive refresh token")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ensureAdminAllowed(tc.user, tc.clientType)
+			if tc.wantErr {
+				if !errors.Is(err, ErrAdminWebOnly) {
+					t.Fatalf("expected ErrAdminWebOnly, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+		})
 	}
 }
