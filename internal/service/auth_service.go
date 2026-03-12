@@ -26,6 +26,8 @@ type AuthService struct {
 	now           func() time.Time
 }
 
+const webAccessTokenExpiry = time.Hour
+
 type AuthResult struct {
 	Token            string         `json:"token"`
 	ExpiresAt        time.Time      `json:"expiresAt"`
@@ -56,23 +58,11 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-func (service *AuthService) IssueToken(user domain.User) (AuthResult, error) {
+func (service *AuthService) IssueTokenClient(user domain.User, clientType string) (AuthResult, error) {
 	service.cleanupExpiredRefreshTokens()
 
-	expiry := service.cfg.JWTExpiryUser
-	refreshExpiry := service.cfg.JWTRefreshExpiryUser
-	if user.Role == domain.RoleAdmin {
-		expiry = service.cfg.JWTExpiryAdmin
-		refreshExpiry = service.cfg.JWTRefreshExpiryAdmin
-	}
-	if expiry <= 0 {
-		expiry = service.cfg.JWTExpiry
-	}
-	if refreshExpiry <= 0 {
-		refreshExpiry = service.cfg.JWTRefreshExpiry
-	}
+	expiry := service.accessTokenExpiry(user, clientType)
 	expires := service.now().Add(expiry)
-	refreshExpires := service.now().Add(refreshExpiry)
 	claims := Claims{
 		UserID: user.ID,
 		Role:   user.Role,
@@ -89,6 +79,17 @@ func (service *AuthService) IssueToken(user domain.User) (AuthResult, error) {
 		return AuthResult{}, err
 	}
 
+	result := AuthResult{
+		Token:     signed,
+		ExpiresAt: expires,
+		User:      domain.ToUserDTO(user),
+	}
+	if !shouldIssueRefreshToken(clientType) {
+		return result, nil
+	}
+
+	refreshExpiry := service.refreshTokenExpiry(user)
+	refreshExpires := service.now().Add(refreshExpiry)
 	refreshToken, err := generateRefreshToken()
 	if err != nil {
 		return AuthResult{}, err
@@ -104,13 +105,9 @@ func (service *AuthService) IssueToken(user domain.User) (AuthResult, error) {
 		return AuthResult{}, err
 	}
 
-	return AuthResult{
-		Token:            signed,
-		ExpiresAt:        expires,
-		RefreshToken:     refreshToken,
-		RefreshExpiresAt: refreshExpires,
-		User:             domain.ToUserDTO(user),
-	}, nil
+	result.RefreshToken = refreshToken
+	result.RefreshExpiresAt = refreshExpires
+	return result, nil
 }
 
 func (service *AuthService) LoginWithPasswordClient(username string, password string, clientType string) (AuthResult, error) {
@@ -138,11 +135,14 @@ func (service *AuthService) LoginWithPasswordClient(username string, password st
 	if err := ensureAdminAllowed(*user, clientType); err != nil {
 		return AuthResult{}, err
 	}
-	return service.IssueToken(*user)
+	return service.IssueTokenClient(*user, clientType)
 }
 
 func (service *AuthService) RefreshWithTokenClient(refreshToken string, clientType string) (AuthResult, error) {
 	service.cleanupExpiredRefreshTokens()
+	if isWebClient(clientType) {
+		return AuthResult{}, errors.New("refresh token tidak didukung di web")
+	}
 
 	token := strings.TrimSpace(refreshToken)
 	if token == "" {
@@ -165,7 +165,7 @@ func (service *AuthService) RefreshWithTokenClient(refreshToken string, clientTy
 		return AuthResult{}, err
 	}
 	_ = service.refreshTokens.DeleteByID(stored.ID)
-	return service.IssueToken(*user)
+	return service.IssueTokenClient(*user, clientType)
 }
 
 func (service *AuthService) LogoutWithRefreshToken(refreshToken string) error {
@@ -186,6 +186,40 @@ func ensureAdminAllowed(user domain.User, clientType string) error {
 		return nil
 	}
 	return ErrAdminWebOnly
+}
+
+func (service *AuthService) accessTokenExpiry(user domain.User, clientType string) time.Duration {
+	if isWebClient(clientType) {
+		return webAccessTokenExpiry
+	}
+
+	expiry := service.cfg.JWTExpiryUser
+	if user.Role == domain.RoleAdmin {
+		expiry = service.cfg.JWTExpiryAdmin
+	}
+	if expiry <= 0 {
+		expiry = service.cfg.JWTExpiry
+	}
+	return expiry
+}
+
+func (service *AuthService) refreshTokenExpiry(user domain.User) time.Duration {
+	refreshExpiry := service.cfg.JWTRefreshExpiryUser
+	if user.Role == domain.RoleAdmin {
+		refreshExpiry = service.cfg.JWTRefreshExpiryAdmin
+	}
+	if refreshExpiry <= 0 {
+		refreshExpiry = service.cfg.JWTRefreshExpiry
+	}
+	return refreshExpiry
+}
+
+func shouldIssueRefreshToken(clientType string) bool {
+	return !isWebClient(clientType)
+}
+
+func isWebClient(clientType string) bool {
+	return strings.EqualFold(strings.TrimSpace(clientType), "web")
 }
 
 func (service *AuthService) ParseToken(tokenString string) (*Claims, error) {
