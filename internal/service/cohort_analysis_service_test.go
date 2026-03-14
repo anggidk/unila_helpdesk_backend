@@ -42,6 +42,13 @@ func TestPeriodDiff(t *testing.T) {
 			expect: 2,
 		},
 		{
+			name:   "unknown unit falls back to monthly difference",
+			start:  time.Date(2025, 11, 15, 10, 0, 0, 0, reportLocationWIB),
+			end:    time.Date(2026, 1, 2, 9, 0, 0, 0, reportLocationWIB),
+			unit:   "quarterly",
+			expect: 2,
+		},
+		{
 			name:   "negative difference when end is before start",
 			start:  time.Date(2026, 3, 5, 10, 0, 0, 0, reportLocationWIB),
 			end:    time.Date(2026, 3, 4, 10, 0, 0, 0, reportLocationWIB),

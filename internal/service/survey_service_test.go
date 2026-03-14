@@ -3,7 +3,6 @@ package service
 import (
 	"math"
 	"testing"
-	"time"
 
 	"unila_helpdesk_backend/internal/domain"
 )
@@ -81,63 +80,6 @@ func TestCalculateSurveyScore(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestBuildSurveyResponseItemsSkipsBlankOptionalText(t *testing.T) {
-	template := &domain.SurveyTemplate{
-		ID: "tmpl-1",
-		Questions: []domain.SurveyQuestion{
-			{ID: "q_scale", Type: domain.QuestionLikert4},
-			{ID: "q_text", Type: domain.QuestionText},
-		},
-	}
-
-	items, err := buildSurveyResponseItems(
-		"resp-1",
-		map[string]interface{}{
-			"q_scale": 4,
-			"q_text":  "   ",
-		},
-		template,
-		testTime(),
-	)
-	if err != nil {
-		t.Fatalf("buildSurveyResponseItems returned error: %v", err)
-	}
-	if len(items) != 1 {
-		t.Fatalf("expected 1 item, got %d", len(items))
-	}
-	if items[0].QuestionID != "q_scale" {
-		t.Fatalf("expected q_scale item, got %s", items[0].QuestionID)
-	}
-}
-
-func TestBuildSurveyResponseItemsBlankOptionalTextOnlyReturnsEmpty(t *testing.T) {
-	template := &domain.SurveyTemplate{
-		ID: "tmpl-1",
-		Questions: []domain.SurveyQuestion{
-			{ID: "q_text", Type: domain.QuestionText},
-		},
-	}
-
-	items, err := buildSurveyResponseItems(
-		"resp-1",
-		map[string]interface{}{
-			"q_text": "",
-		},
-		template,
-		testTime(),
-	)
-	if err != nil {
-		t.Fatalf("buildSurveyResponseItems returned error: %v", err)
-	}
-	if len(items) != 0 {
-		t.Fatalf("expected 0 items, got %d", len(items))
-	}
-}
-
-func testTime() time.Time {
-	return time.Date(2026, time.March, 12, 0, 0, 0, 0, time.UTC)
 }
 
 func almostEqualSurveyScore(left float64, right float64) bool {

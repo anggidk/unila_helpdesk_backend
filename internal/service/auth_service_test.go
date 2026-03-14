@@ -21,6 +21,12 @@ func TestEnsureAdminAllowed(t *testing.T) {
 			wantErr:    false,
 		},
 		{
+			name:       "non admin empty client type is allowed",
+			user:       domain.User{Role: domain.RoleRegistered},
+			clientType: "",
+			wantErr:    false,
+		},
+		{
 			name:       "admin web is allowed",
 			user:       domain.User{Role: domain.RoleAdmin},
 			clientType: "web",

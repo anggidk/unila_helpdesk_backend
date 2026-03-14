@@ -122,6 +122,13 @@ func TestPeriodRange(t *testing.T) {
 			expectEnd:   time.Date(2026, 3, 10, 0, 0, 0, 0, reportLocationWIB),
 		},
 		{
+			name:        "weekly range uses monday aligned windows",
+			period:      "weekly",
+			periods:     2,
+			expectStart: time.Date(2026, 3, 2, 0, 0, 0, 0, reportLocationWIB),
+			expectEnd:   time.Date(2026, 3, 16, 0, 0, 0, 0, reportLocationWIB),
+		},
+		{
 			name:        "monthly range spans requested windows",
 			period:      "monthly",
 			periods:     2,
@@ -344,6 +351,35 @@ func TestBuildEntityPreferenceOverview(t *testing.T) {
 			t.Fatalf("expected share %v at index %d, got %v", expected[index].Share, index, got[index].Share)
 		}
 	}
+
+	t.Run("empty rows return empty metrics for ordered entities", func(t *testing.T) {
+		empty := buildEntityPreferenceOverview(nil, map[string]string{})
+		if len(empty) != 4 {
+			t.Fatalf("expected 4 ordered entity preferences, got %d", len(empty))
+		}
+
+		expectedEntities := []string{
+			domain.EntityMahasiswa,
+			domain.EntityDosen,
+			domain.EntityTendik,
+			domain.EntityLainnya,
+		}
+
+		for index, entity := range expectedEntities {
+			if empty[index].Entity != entity {
+				t.Fatalf("expected entity %q at index %d, got %q", entity, index, empty[index].Entity)
+			}
+			if empty[index].Category != "" {
+				t.Fatalf("expected empty category at index %d, got %q", index, empty[index].Category)
+			}
+			if empty[index].Responses != 0 {
+				t.Fatalf("expected 0 responses at index %d, got %d", index, empty[index].Responses)
+			}
+			if empty[index].Share != 0 {
+				t.Fatalf("expected 0 share at index %d, got %v", index, empty[index].Share)
+			}
+		}
+	})
 }
 
 func almostEqualReportScore(left float64, right float64) bool {
