@@ -1,52 +1,85 @@
 # Unila Helpdesk Backend (Go)
 
-Backend Go + PostgreSQL untuk aplikasi helpdesk & survey kepuasan.
+Backend Go + PostgreSQL untuk aplikasi helpdesk dan survey kepuasan.
+
+## Prasyarat
+
+- Go 1.22+ (disarankan versi terbaru yang kompatibel dengan `go.mod`)
+- PostgreSQL 13+
+- File `.env` (disalin dari `.env.example`)
 
 ## Quick Start
 
-1. Siapkan PostgreSQL dan buat database:
+1. Buat database PostgreSQL.
 
-```
+Windows (PowerShell):
+
+```powershell
 createdb unila_helpdesk
 ```
 
-2. Salin env contoh:
+Linux/macOS:
 
-```
-copy .env.example .env
+```bash
+createdb unila_helpdesk
 ```
 
-3. Jalankan API:
+2. Salin env contoh menjadi `.env`.
 
+Windows (PowerShell):
+
+```powershell
+Copy-Item .env.example .env
 ```
+
+Linux/macOS:
+
+```bash
+cp .env.example .env
+```
+
+3. Atur nilai penting di `.env`, minimal:
+
+- `DATABASE_URL` untuk koneksi Postgres
+- `JWT_SECRET` untuk signing token
+- `FCM_ENABLED=true` dan `FCM_CREDENTIALS=path/to/serviceAccount.json` jika memakai push notification
+
+4. Jalankan API.
+
+```bash
 go run ./cmd/api
 ```
 
-API berjalan di `http://localhost:8080` (default).
+Default API berjalan di `http://localhost:8080`.
 
-## Environment
+## Seed Data
 
-Lihat `.env.example` untuk daftar lengkap. Poin penting:
+Project menyediakan command seed berikut:
 
-- `DATABASE_URL` koneksi Postgres
-- `JWT_SECRET` kunci token
-- `FCM_ENABLED=true` + `FCM_CREDENTIALS=path/to/serviceAccount.json`
+```bash
+go run ./cmd/seed
+go run ./cmd/seed_random_tickets
+```
+
+Gunakan sesuai kebutuhan untuk data awal/testing.
 
 ## Integrasi Frontend Flutter
 
-Jalankan aplikasi Flutter dengan base URL backend:
+Saat menjalankan Flutter app, set base URL backend:
 
-```
+```bash
 flutter run --dart-define=API_BASE_URL=http://localhost:8080
 ```
 
 ## API Ringkas
 
 ### Authentication
-- `POST /auth/login` - Login dengan username/password
-- `POST /auth/refresh` - Refresh access token
+
+- `POST /auth/login` - login dengan username/password
+- `POST /auth/refresh` - refresh access token
 
 ### Tickets
+
 - `GET /tickets` (auth)
 - `GET /tickets/search` (public)
 - `GET /tickets/:id` (optional auth)
@@ -54,7 +87,8 @@ flutter run --dart-define=API_BASE_URL=http://localhost:8080
 - `POST /tickets/:id` (auth)
 - `POST /tickets/:id/delete` (auth)
 
-### Surveys & Reports
+### Surveys and Reports
+
 - `GET /surveys` (public)
 - `GET /surveys/categories/:categoryId` (public)
 - `POST /surveys` (admin)
@@ -64,13 +98,17 @@ flutter run --dart-define=API_BASE_URL=http://localhost:8080
 - `GET /reports` (admin)
 - `GET /reports/cohort` (admin)
 
+Dokumen detail endpoint tersedia di folder `docs/`.
+
 ## JWT Token Management
 
 Aplikasi menggunakan dual-token system:
-1. **Access Token**: JWT token untuk otentikasi API (expired: 12h untuk user, 8h untuk admin)
-2. **Refresh Token**: Long-lived token untuk mendapatkan access token baru (expired: 30 hari untuk user, 7 hari untuk admin)
 
-### Login Response
+1. Access Token: JWT untuk otentikasi API (expired: 12 jam untuk user, 8 jam untuk admin)
+2. Refresh Token: token untuk mendapatkan access token baru (expired: 30 hari untuk user, 7 hari untuk admin)
+
+### Contoh Response Login
+
 ```json
 {
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -87,7 +125,8 @@ Aplikasi menggunakan dual-token system:
 }
 ```
 
-### Refresh Token Usage
+### Contoh Refresh Token
+
 ```bash
 curl -X POST http://localhost:8080/auth/refresh \
   -H "Content-Type: application/json" \
